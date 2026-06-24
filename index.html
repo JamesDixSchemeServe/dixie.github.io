@@ -308,7 +308,6 @@ import { getDatabase, ref, set, get, update, remove, onValue, push } from "https
 
   };
 
-const OPENAI_API_KEY = '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';   // ← paste your OpenAI key here
 
 // ─── STATE ───────────────────────────────────────────────────────────────────
 let db, appData = {}, currentTab = 'overview', activeFilter = 'all';
@@ -1341,158 +1340,59 @@ window.resolvePurchasedByAdmiralty = async function(id) {
 // ─── BATTLE REPORT MODAL ──────────────────────────────────────────────────────
 window.openAddLog = function() {
   const players = Object.entries(appData.players || {}).filter(([id]) => id !== 'merchant');
+  document.getElementById('modal-content').style.maxWidth = '640px';
   showModal(`<button class="modal-close" onclick="closeModal()">&#x2715;</button>
     <h2>&#x2693; New Dispatch</h2>
-    <p style="color:var(--text-muted);font-size:0.82rem;margin-bottom:14px">Select commanders involved, write a summary, then draft the admiralty dispatch.</p>
 
     <div class="form-row"><label>Reporting Commander</label>
       <select id="log-reporter">${players.map(([id,p])=>`<option value="${id}">${FACTION_FLAG[p.faction]||''} ${p.officerName} (${p.name})</option>`).join('')}</select>
     </div>
-    <div class="form-row"><label>Squadron Engaged <span style="color:var(--text-muted);font-weight:normal">(optional)</span></label>
-      <input id="log-squadron" placeholder="e.g. A, or leave blank">
-    </div>
-    <div class="form-row"><label>Date</label>
-      <input type="date" id="log-date" value="${new Date().toISOString().slice(0,10)}">
+    <div class="form-grid">
+      <div class="form-row"><label>Squadron <span style="color:var(--text-muted);font-weight:normal">(optional)</span></label>
+        <input id="log-squadron" placeholder="e.g. A"></div>
+      <div class="form-row"><label>Date</label>
+        <input type="date" id="log-date" value="${new Date().toISOString().slice(0,10)}"></div>
     </div>
 
-    <div class="form-row" style="margin-top:10px"><label>Opposing Forces</label>
+    <div class="form-row"><label>Opposing Forces</label>
       <div class="player-check-grid">
         ${players.map(([id,p])=>`<label class="player-check"><input type="checkbox" id="log-opp-${id}" value="${id}"> ${FACTION_FLAG[p.faction]||''} ${p.officerName} <span style="color:var(--text-muted);font-size:0.75rem">${p.name}</span></label>`).join('')}
       </div>
     </div>
 
-    <div class="form-row" style="margin-top:10px"><label>Summary</label>
-      <textarea id="log-summary" rows="5" placeholder="Describe what occurred…" style="font-size:0.88rem;line-height:1.6"></textarea>
+    <div class="form-row"><label>Dispatch</label>
+      <textarea id="log-letter" rows="12" placeholder="Paste the dispatch text here…" style="font-size:0.85rem;line-height:1.7;font-style:italic"></textarea>
     </div>
 
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-      <button class="btn" onclick="draftBattleReport()">Draft Dispatch &#x2192;</button>
+      <button class="btn" onclick="saveDispatch()">Log Dispatch</button>
     </div>`);
 };
 
-window.draftBattleReport = async function() {
-  const reporter  = document.getElementById('log-reporter').value;
-  const squadron  = document.getElementById('log-squadron').value.trim();
-  const summary   = document.getElementById('log-summary').value.trim();
-  const dateVal   = document.getElementById('log-date').value;
+window.saveDispatch = async function() {
+  const letter = document.getElementById('log-letter').value.trim();
+  if (!letter) { showToast('Paste the dispatch text first'); return; }
   const players   = appData.players || {};
   const meta      = appData.meta || {};
+  const reporter  = document.getElementById('log-reporter').value;
+  const squadron  = document.getElementById('log-squadron').value.trim();
+  const dateVal   = document.getElementById('log-date').value;
   const opponents = Object.keys(players).filter(id => {
     const el = document.getElementById(`log-opp-${id}`);
     return el && el.checked;
   });
-  if (!summary) { showToast('Please enter a summary'); return; }
-
-  const rp      = players[reporter] || {};
-  const dateStr = dateVal ? new Date(dateVal).toLocaleDateString('en-GB',{day:'numeric',month:'long'}) : '';
-  const oppTags = opponents.map(id => { const p=players[id]; return p?`${FACTION_FLAG[p.faction]||''} ${p.officerName}`:id; }).join(', ');
-
-  // Show loading state
-  document.getElementById('modal-content').style.maxWidth = '640px';
-  showModal(`<h2>&#x2693; Drafting Dispatch…</h2>
-    <div style="display:flex;align-items:center;gap:12px;padding:20px 0;color:var(--text-muted)">
-      <div class="spinner"></div>
-      <span>${OPENAI_API_KEY ? 'Consulting the Admiralty scribes…' : 'Composing dispatch…'}</span>
-    </div>`);
-
-  const letter = await _generateLetter(rp.faction, rp.rank||'Commander', rp.officerName||reporter, squadron, opponents, meta.turn||1, meta.phase||1, summary, players, dateStr);
-
-  window._pendingReport = { reporter, opponents, squadron, summary, letter, turn:meta.turn||1, phase:meta.phase||1, gameDate: dateVal };
-
-  showModal(`<button class="modal-close" onclick="closeModal()">&#x2715;</button>
-    <h2>&#x2693; Admiralty Dispatch</h2>
-    <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:8px">
-      Turn ${meta.turn||1} · Phase ${meta.phase||1} · ${FACTION_FLAG[rp.faction]||''} ${rp.officerName||reporter}${oppTags ? ' vs ' + oppTags : ''}${dateStr ? ' · ' + dateStr : ''}
-    </div>
-    <div class="letter-box">${letter.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>
-    <div class="modal-actions" style="margin-top:16px">
-      <button class="btn btn-ghost" onclick="openAddLog()">&#x2190; Edit</button>
-      <button class="btn" onclick="confirmBattleReport()">Confirm & Log</button>
-    </div>`);
-};
-
-async function _generateLetter(faction, rank, name, squadron, opponents, turn, phase, summary, players, dateStr) {
-  const oppList = opponents.map(o => {
-    const p = players[o];
-    return p ? `${p.officerName} (${p.faction})` : o;
-  }).join(' and ');
-
-  // If no API key, fall back to template
-  if (!OPENAI_API_KEY) {
-    return _templateLetter(faction, rank, name, squadron, oppList, turn, phase, summary, dateStr);
-  }
-
-  const systemPrompts = {
-    British: `You are writing a formal Royal Navy dispatch letter, circa 1800. The letter is from a British naval officer to the Lords Commissioners of the Admiralty. Write in authentic period style: formal, restrained, third-person references to ships and actions, understated about danger, precise about navigational detail. Use period vocabulary (struck, bore away, lay-to, raking fire, quarterdeck, &c.). The letter should be 3–5 paragraphs. Do not invent specific facts not given — expand the summary into period prose but stay true to the events described. End with the standard sign-off.`,
-    French: `You are writing a formal French Navy dispatch letter in French, circa 1800. The letter is from a French naval officer to the Ministre de la Marine et des Colonies. Write in authentic period style: formal, passionate, proud, with references to la République or l'Empereur as appropriate. Use period French naval vocabulary. 3–5 paragraphs. Do not invent facts not given — expand the summary into period prose. End with the standard sign-off.`,
-    Spanish: `You are writing a formal Spanish Navy dispatch letter in English, circa 1800. The letter is from a Spanish naval officer to His Excellency the Minister of Marine. Write in English but with Spanish formal phrasing and conventions of the period: deferential, honour-conscious, Catholic in sensibility (references to God's grace as appropriate), formal address. 3–5 paragraphs. Do not invent facts not given — expand the summary into period prose. End with the standard sign-off.`,
-  };
-
-  const systemPrompt = systemPrompts[faction] || systemPrompts.British;
-
-  const context = [
-    `Officer: ${rank} ${name}`,
-    squadron ? `Squadron: ${squadron}` : null,
-    oppList  ? `Opposing forces: ${oppList}` : null,
-    `Turn ${turn}, Phase ${phase}`,
-    dateStr  ? `Date: ${dateStr}` : null,
-  ].filter(Boolean).join('\n');
-
-  const userPrompt = `Write the dispatch letter based on this context and summary.\n\nContext:\n${context}\n\nSummary of events:\n${summary}`;
-
-  try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_API_KEY}` },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user',   content: userPrompt },
-        ],
-        temperature: 0.8,
-        max_tokens: 800,
-      }),
-    });
-    if (!res.ok) throw new Error(`OpenAI error ${res.status}`);
-    const data = await res.json();
-    return data.choices[0].message.content.trim();
-  } catch(e) {
-    console.warn('OpenAI failed, using template:', e);
-    return _templateLetter(faction, rank, name, squadron, oppList, turn, phase, summary, dateStr);
-  }
-}
-
-function _templateLetter(faction, rank, name, squadron, oppList, turn, phase, summary, dateStr) {
-  const sqNote  = squadron ? `, commanding the ${squadron} Squadron,` : '';
-  const oppNote = oppList  ? ` against the forces of ${oppList}` : '';
-  const dateLine = dateStr ? `\n${dateStr}` : '';
-  if (faction === 'French') {
-    return `Au Ministre de la Marine et des Colonies,${dateLine}\n\nExcellence,\n\nJ'ai l'honneur de soumettre à Votre Excellence le rapport de l'action qui s'est tenue au cours du Tour ${turn}, Phase ${phase}.\n\nMoi-même${sqNote} me suis trouvé en présence de l'ennemi${oppNote}.\n\n${summary}\n\nJ'ai l'honneur d'être, de Votre Excellence, le très humble et très obéissant serviteur,\n\n${rank} ${name}\nCommandant l'Escadre${squadron ? ' — ' + squadron : ''}`;
-  }
-  if (faction === 'Spanish') {
-    return `To His Excellency the Minister of Marine,${dateLine}\n\nYour Excellency,\n\nI have the honour to lay before Your Excellency an account of the action which took place during Turn ${turn}, Phase ${phase}, in the waters of the Biscay & Iberian Station.\n\nI${sqNote} found myself engaged${oppNote}.\n\n${summary}\n\nI have the honour to remain, Your Excellency's most humble and obedient servant,\n\n${rank} ${name}\nCommanding${squadron ? ', Squadron ' + squadron : ''}`;
-  }
-  return `To the Lords Commissioners of the Admiralty,${dateLine}\n\nMy Lords,\n\nI have the honour to lay before your Lordships an account of the action which took place during Turn ${turn}, Phase ${phase}, in the waters of the Biscay & Iberian Station.\n\nI${sqNote} found myself engaged${oppNote}.\n\n${summary}\n\nI have the honour to be, My Lords, Your Lordships' most obedient servant,\n\n${rank} ${name}\nCommanding${squadron ? ', ' + squadron + ' Squadron' : ''}`;
-}
-
-window.confirmBattleReport = async function() {
-  const r = window._pendingReport;
-  if (!r) return;
   await push(ref(db, '/log'), {
-    type: 'battle',
-    turn: r.turn,
-    phase: r.phase,
-    reporter: r.reporter,
-    opponents: r.opponents,
-    squadron: r.squadron || '',
-    summary: r.summary,
-    letter: r.letter,
-    gameDate: r.gameDate || '',
+    type: 'dispatch',
+    turn: meta.turn || 1,
+    phase: meta.phase || 1,
+    reporter,
+    opponents,
+    squadron: squadron || '',
+    letter,
+    gameDate: dateVal || '',
     timestamp: new Date().toISOString(),
   });
-  window._pendingReport = null;
   document.getElementById('modal-content').style.maxWidth = '';
   closeModal();
   showToast('Dispatch logged');
