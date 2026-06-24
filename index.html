@@ -190,7 +190,7 @@
 <div id="app" style="display:none">
   <header>
     <h1>⚓ Biscay & Iberian Station</h1>
-    <div class="turn-badge" onclick="openTurnModal()">Turn <span id="hdr-turn">1</span> · Phase <span id="hdr-phase">1</span></div>
+    <button class="turn-badge" onclick="openCampaignModal()">Campaign Management</button>
   </header>
   <nav id="main-nav">
     <button class="active" onclick="showTab('overview')">Overview</button>
@@ -273,6 +273,8 @@ import { getDatabase, ref, set, get, update, remove, onValue, push } from "https
 
 // ─── STATE ───────────────────────────────────────────────────────────────────
 let db, appData = {}, currentTab = 'overview', activeFilter = 'all';
+const campaignId = (location.hash.replace(/^#/,'').trim().toLowerCase().replace(/[^a-z0-9_-]/g,'') || 'default');
+const cref = path => ref(db, `/campaigns/${campaignId}${path}`);
 
 const SHIP_TYPES = ['1st Rate','2nd Rate','3rd Rate','4th Rate','Razee','Heavy Frigate','5th Rate Frigate','6th Rate','Ship-Sloop','Brig-Sloop','Gun Brig','Corvette','Cutter','Schooner','Gunboat','Bomb Vessel','Xebec','Large Xebec','Polacre','Galley','Galiot','Tartane','Felucca','Merchantman','East Indiaman','Manila Galleon','Packet Ship','Privateer','Privateer Schooner','Privateer Brig','Privateer Cutter','Letter of Marque'];
 const FACTIONS = ['British','French','Spanish'];
@@ -364,13 +366,13 @@ async function connect(cfg) {
     const app = initializeApp(cfg);
     db = getDatabase(app);
     // Check if data exists; if not, seed it
-    const snap = await get(ref(db, '/'));
+    const snap = await get(cref('/'));
     if (!snap.exists()) {
-      await set(ref(db, '/'), SEED);
+      await set(cref('/'), { meta: { turn: 1, phase: 1 } });
     }
     await runMigrations();
     // Subscribe to live updates
-    onValue(ref(db, '/'), (snapshot) => {
+    onValue(cref('/'), (snapshot) => {
       appData = snapshot.val() || {};
       renderCurrentTab();
     });
@@ -382,6 +384,32 @@ async function connect(cfg) {
 }
 
 async function runMigrations() {
+  try {
+    // v2: lift root-level data into /campaigns/default/ (one-time after namespacing refactor)
+    const v2Snap = await get(ref(db, '/migrations/v2_namespace'));
+    if (!v2Snap.exists()) {
+      const rootSnap = await get(ref(db, '/'));
+      const root = rootSnap.val() || {};
+      const keysToMigrate = ['ships', 'players', 'log', 'meta'];
+      const hasMigratable = keysToMigrate.some(k => root[k]);
+      if (hasMigratable) {
+        const updates = {};
+        for (const k of keysToMigrate) {
+          if (root[k]) updates[`/campaigns/default/${k}`] = root[k];
+        }
+        updates['/migrations/v2_namespace'] = true;
+        // clear old root keys
+        for (const k of keysToMigrate) {
+          if (root[k]) updates[`/${k}`] = null;
+        }
+        await update(ref(db, '/'), updates);
+        console.log('v2 migration: root data moved to /campaigns/default/');
+      } else {
+        await update(ref(db, '/'), { '/migrations/v2_namespace': true });
+      }
+    }
+  } catch(e) { console.warn('Migration v2 failed:', e); }
+
   try {
     const migSnap = await get(ref(db, '/migrations/v1_capture_links'));
     if (migSnap.exists()) return;
@@ -401,7 +429,7 @@ async function runMigrations() {
     }
     updates['migrations/v1_capture_links'] = true;
     await update(ref(db, '/'), updates);
-  } catch(e) { console.warn('Migration failed:', e); }
+  } catch(e) { console.warn('Migration v1 failed:', e); }
 }
 
 
@@ -527,12 +555,12 @@ function renderOverview() {
 
 window.adjustTurn = async function(delta) {
   const newVal = Math.max(1, (appData.meta.turn || 1) + delta);
-  await update(ref(db, '/meta'), { turn: newVal });
+  await update(cref('/meta'), { turn: newVal });
 };
 
 window.adjustPhase = async function(delta) {
   const newVal = Math.min(3, Math.max(1, (appData.meta.phase || 1) + delta));
-  await update(ref(db, '/meta'), { phase: newVal });
+  await update(cref('/meta'), { phase: newVal });
 };
 
 // ─── PLAYER VIEW ──────────────────────────────────────────────────────────────
@@ -718,7 +746,7 @@ const CHASER_LABELS={'L':'Lt.LG','M':'Med.LG','H':'Hvy.LG','LC':'Lt.Carr','C':'C
 window.shipSpAdj = async function(id, delta) {
   const s=(appData.ships||{})[id]; if(!s) return;
   const n=Math.max(0,Math.min(s.spMax,(s.spCurrent||0)+delta));
-  await update(ref(db,`/ships/${id}`),{spCurrent:n});
+  await update(cref(`/ships/${id}`),{spCurrent:n});
 };
 
 function shipCard(id, s) {
@@ -863,26 +891,94 @@ window.setFilter = function(f) {
 };
 
 // ─── TURN MODAL ───────────────────────────────────────────────────────────────
-window.openTurnModal = function() {
+window.openCampaignModal = function() {
   const meta = appData.meta || {};
   showModal(`<button class="modal-close" onclick="closeModal()">×</button>
-    <h2>Campaign Status</h2>
-    <div class="form-grid">
-      <div class="form-row"><label>Game Turn</label><input type="number" id="m-turn" value="${meta.turn}" min="1"></div>
-      <div class="form-row"><label>Phase (1–3)</label><input type="number" id="m-phase" value="${meta.phase}" min="1" max="3"></div>
+    <h2>⚙ Campaign Management</h2>
+
+    <div class="section-label">Active Campaign</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <code style="background:var(--surface3);border:1px solid var(--border);border-radius:4px;padding:3px 8px;font-size:0.9rem;color:var(--accent)">${campaignId}</code>
     </div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-      <button class="btn" onclick="saveTurn()">Save</button>
-    </div>`);
+    <p style="font-size:0.8rem;color:var(--text-muted);margin:0 0 8px">Share this URL with your group — everyone on the same campaign ID sees live updates.</p>
+    <div style="display:flex;gap:8px">
+      <input id="cm-switch" placeholder="other-campaign-id" style="flex:1">
+      <button class="btn btn-sm" onclick="campaignSwitch()">Switch</button>
+    </div>
+
+    <div class="section-label" style="margin-top:20px">Turn &amp; Phase</div>
+    <div class="form-grid">
+      <div class="form-row"><label>Game Turn</label><input type="number" id="m-turn" value="${meta.turn||1}" min="1"></div>
+      <div class="form-row"><label>Phase (1–3)</label><input type="number" id="m-phase" value="${meta.phase||1}" min="1" max="3"></div>
+    </div>
+    <div style="margin-top:8px">
+      <button class="btn" onclick="saveTurn()">Save Turn &amp; Phase</button>
+    </div>
+
+    <div class="section-label" style="margin-top:20px">Add Player</div>
+    <div class="form-grid">
+      <div class="form-row"><label>Player Name</label><input id="cp-name" placeholder="e.g. James"></div>
+      <div class="form-row"><label>Faction</label><select id="cp-faction">${FACTIONS.map(f=>`<option>${f}</option>`).join('')}</select></div>
+    </div>
+    <div class="form-grid">
+      <div class="form-row"><label>Officer Name</label><input id="cp-officer" placeholder="e.g. Capt. Smith (optional)"></div>
+      <div class="form-row"><label>Starting Resources</label><input type="number" id="cp-resources" value="500" min="0"></div>
+    </div>
+    <div style="margin-top:8px">
+      <button class="btn" onclick="campaignAddPlayer()">Add Player</button>
+    </div>
+
+    <div class="section-label" style="margin-top:20px">New Campaign</div>
+    <p style="font-size:0.82rem;color:var(--text-muted);margin:4px 0 8px">Create a blank campaign under a new ID. Share the new URL with your group.</p>
+    <div style="display:flex;gap:8px">
+      <input id="cm-new" placeholder="e.g. mediterranean-1812" style="flex:1">
+      <button class="btn btn-sm" onclick="campaignCreate()">Create</button>
+    </div>
+
+    <div class="section-label" style="margin-top:20px;color:var(--red)">Reset This Campaign</div>
+    <p style="font-size:0.82rem;color:var(--text-muted);margin:4px 0 10px">Wipe all players, ships, and dispatches for <strong>${campaignId}</strong>.</p>
+    <button class="btn btn-danger" onclick="campaignNew()">Reset Campaign</button>
+  `);
+};
+
+window.campaignSwitch = function() {
+  const id = document.getElementById('cm-switch').value.trim().toLowerCase().replace(/[^a-z0-9_-]/g,'');
+  if (!id) { showToast('Enter a campaign ID'); return; }
+  location.hash = id; location.reload();
+};
+
+window.campaignCreate = function() {
+  const id = document.getElementById('cm-new').value.trim().toLowerCase().replace(/[^a-z0-9_-]/g,'');
+  if (!id) { showToast('Enter a campaign name'); return; }
+  location.hash = id; location.reload();
 };
 
 window.saveTurn = async function() {
-  await update(ref(db, '/meta'), {
-    turn: parseInt(document.getElementById('m-turn').value),
-    phase: parseInt(document.getElementById('m-phase').value),
+  await update(cref('/meta'), {
+    turn: parseInt(document.getElementById('m-turn').value)||1,
+    phase: parseInt(document.getElementById('m-phase').value)||1,
   });
-  closeModal(); showToast('Campaign status updated');
+  showToast('Turn & phase saved');
+};
+
+window.campaignAddPlayer = async function() {
+  const name = document.getElementById('cp-name').value.trim();
+  if (!name) { showToast('Player needs a name'); return; }
+  const faction  = document.getElementById('cp-faction').value;
+  const officer  = document.getElementById('cp-officer').value.trim();
+  const resources = parseInt(document.getElementById('cp-resources').value)||500;
+  const newRef = push(cref('/players'));
+  await set(newRef, { name, faction, resources, officerName: officer, rank: 'Master and Commander', admiraltyFavour: 0 });
+  document.getElementById('cp-name').value = '';
+  document.getElementById('cp-officer').value = '';
+  document.getElementById('cp-resources').value = '500';
+  showToast(`${name} (${faction}) added`);
+};
+
+window.campaignNew = async function() {
+  if (!confirm('Start a new campaign?\n\nThis will permanently erase ALL players, ships, and dispatches. This cannot be undone.')) return;
+  await set(cref('/'), { meta: { turn: 1, phase: 1 } });
+  closeModal(); showToast('Campaign reset');
 };
 
 // ─── PLAYER MODAL ─────────────────────────────────────────────────────────────
@@ -931,7 +1027,7 @@ window.setFavour = function(hiddenId, val) {
 };
 
 window.savePlayer = async function(pid) {
-  await update(ref(db, `/players/${pid}`), {
+  await update(cref(`/players/${pid}`), {
     name: document.getElementById('pm-name').value.trim(),
     officerName: document.getElementById('pm-officer').value.trim(),
     rank: document.getElementById('pm-rank').value,
@@ -1320,12 +1416,22 @@ window.openAddShip = function(playerId, faction) {
 window.saveNewShip = async function() {
   const name=document.getElementById('as-name').value.trim();
   if (!name) { showToast('Ship needs a name'); return; }
-  const broadStr=BROAD_CATS.filter(c=>_asBroad[c]>0).map(c=>_asBroad[c]+c).join('-')||'—';
+  const cost=parseInt(document.getElementById('as-cost').value)||0;
+  const player=(appData.players||{})[_asPlayerId];
+  const currentRes=player?.resources??0;
+
+  if (currentRes < cost) {
+    showToast(`Insufficient resources — need ${cost}, have ${currentRes}`);
+    return;
+  }
+  const remaining=currentRes-cost;
+  if (!confirm(`Purchase ${name} for ${cost} resources?\n\nRemaining after purchase: ${remaining} resources`)) return;
+
   const data={
     player:_asPlayerId, faction:_asFaction, name,
     type:document.getElementById('as-type').value,
     crewLevel:document.getElementById('as-crew').value,
-    cost:parseInt(document.getElementById('as-cost').value)||0,
+    cost,
     spCurrent:parseInt(document.getElementById('as-spCurrent').value)||0,
     spMax:parseInt(document.getElementById('as-spMax').value)||1,
     decks:_asDecks.map(d=>({name:d.name,guns:d.guns,caliber:d.caliber,type:d.type})),
@@ -1345,9 +1451,13 @@ window.saveNewShip = async function() {
     sunkBy:'', capturedBy:'',
     notes:document.getElementById('as-notes').value.trim(),
   };
-  const newRef=push(ref(db,'/ships'));
-  await set(newRef,data);
-  closeModal(); showToast(`${data.name} added`);
+  const newShipRef=push(cref('/ships'));
+  const updates={};
+  updates[`/ships/${newShipRef.key}`]=data;
+  updates[`/players/${_asPlayerId}/resources`]=remaining;
+  await update(cref('/'),updates);
+  closeModal();
+  showToast(`${name} purchased — ${remaining} resources remaining`);
 };
 
 window.saveShip = async function(id) {
@@ -1361,7 +1471,7 @@ window.saveShip = async function(id) {
     const newOwner = (appData.players || {})[data.player];
     if (newOwner) data.faction = newOwner.faction;
   }
-  await set(ref(db, `/ships/${id}`), data);
+  await set(cref(`/ships/${id}`), data);
   closeModal(); showToast(data.player !== existing.player ? 'Ship transferred — pending prize decision' : 'Ship updated');
 };
 
@@ -1369,7 +1479,7 @@ window.saveShip = async function(id) {
 window.deleteShip = async function(id) {
   const s = (appData.ships || {})[id];
   if (!confirm(`Delete ${s?.name}? This cannot be undone.`)) return;
-  await remove(ref(db, `/ships/${id}`));
+  await remove(cref(`/ships/${id}`));
   closeModal(); showToast('Ship removed');
 };
 
@@ -1399,7 +1509,7 @@ window.openResolvePrize = function(id) {
 };
 
 window.resolveLostOnPassage = async function(id) {
-  await update(ref(db, `/ships/${id}`), { status: 'sunk', sunkBy: '__lost_on_passage__', prizeResolution: 'lost_on_passage' });
+  await update(cref(`/ships/${id}`), { status: 'sunk', sunkBy: '__lost_on_passage__', prizeResolution: 'lost_on_passage' });
   closeModal(); showToast('Ship lost on passage');
 };
 
@@ -1411,7 +1521,7 @@ window.resolvePrizeMoney = async function(id) {
   updates[`/ships/${id}/status`] = 'sold';
   updates[`/ships/${id}/prizeResolution`] = 'prize_money';
   updates[`/players/${s.player}/resources`] = newResources;
-  await update(ref(db, '/'), updates);
+  await update(cref('/'), updates);
   closeModal(); showToast(`${s.cost} resources added — ship sold`);
 };
 
@@ -1431,7 +1541,7 @@ window.resolvePurchasedByAdmiralty = async function(id) {
   const s = (appData.ships || {})[id];
   const newName = document.getElementById('pr-name').value.trim() || s.name;
   const renamed = newName !== s.name;
-  await update(ref(db, `/ships/${id}`), {
+  await update(cref(`/ships/${id}`), {
     status: 'active',
     crewLevel: 'Inexperienced',
     prizeResolution: 'purchased',
@@ -1486,7 +1596,7 @@ window.saveDispatch = async function() {
     const el = document.getElementById(`log-opp-${id}`);
     return el && el.checked;
   });
-  await push(ref(db, '/log'), {
+  await push(cref('/log'), {
     type: 'dispatch',
     turn: meta.turn || 1,
     phase: meta.phase || 1,
@@ -1504,7 +1614,7 @@ window.saveDispatch = async function() {
 
 window.deleteDispatch = async function(id) {
   if (!confirm('Delete this dispatch? This cannot be undone.')) return;
-  await remove(ref(db, `/log/${id}`));
+  await remove(cref(`/log/${id}`));
   showToast('Dispatch deleted');
 };
 
