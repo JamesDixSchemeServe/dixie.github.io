@@ -895,15 +895,15 @@ const MAP_PORT_POS = {
   'Cádiz':       { x:32.4, y:88.2 },
   'Gibraltar':   { x:39.8, y:91.3 },
 };
-// Zone sea-area spread slots (up to 8 ships per zone without overlap)
+// Zone sea-area spread slots — positions verified to be in open water on the map image
 const MAP_ZONE_SLOTS = {
-  'Zone 1': [{x:40,y:7},{x:50,y:5},{x:58,y:10},{x:44,y:16},{x:33,y:12},{x:55,y:18},{x:38,y:22},{x:62,y:16}],
-  'Zone 2': [{x:56,y:28},{x:63,y:34},{x:53,y:36},{x:60,y:42},{x:50,y:43},{x:67,y:40},{x:58,y:46},{x:47,y:38}],
-  'Zone 3': [{x:56,y:50},{x:63,y:55},{x:52,y:57},{x:68,y:60},{x:48,y:60},{x:60,y:62},{x:54,y:64},{x:44,y:55}],
-  'Zone 4': [{x:20,y:51},{x:13,y:55},{x:26,y:58},{x:17,y:62},{x:10,y:58},{x:28,y:64},{x:22,y:66},{x:8,y:64}],
-  'Zone 5': [{x:11,y:68},{x:6,y:74},{x:15,y:77},{x:8,y:82},{x:17,y:82},{x:4,y:80},{x:12,y:86},{x:20,y:78}],
-  'Zone 6': [{x:16,y:84},{x:8,y:87},{x:22,y:88},{x:12,y:92},{x:20,y:93},{x:5,y:91},{x:28,y:91},{x:25,y:85}],
-  'Zone 7': [{x:30,y:93},{x:38,y:93},{x:24,y:95},{x:44,y:95},{x:32,y:97},{x:20,y:93},{x:46,y:91},{x:36,y:97}],
+  'Zone 1': [{x:32,y:12},{x:42,y:8},{x:52,y:16},{x:36,y:20},{x:26,y:16},{x:48,y:22},{x:22,y:22},{x:56,y:22}],
+  'Zone 2': [{x:52,y:26},{x:58,y:32},{x:46,y:32},{x:62,y:38},{x:44,y:38},{x:55,y:42},{x:40,y:44},{x:64,y:44}],
+  'Zone 3': [{x:52,y:44},{x:58,y:47},{x:46,y:46},{x:62,y:44},{x:43,y:48},{x:66,y:47},{x:56,y:50},{x:40,y:50}],
+  'Zone 4': [{x:14,y:52},{x:8,y:56},{x:20,y:58},{x:6,y:62},{x:16,y:64},{x:24,y:60},{x:4,y:68},{x:22,y:66}],
+  'Zone 5': [{x:8,y:68},{x:4,y:74},{x:12,y:76},{x:5,y:82},{x:14,y:82},{x:2,y:80},{x:10,y:86},{x:16,y:76}],
+  'Zone 6': [{x:10,y:84},{x:4,y:88},{x:16,y:88},{x:6,y:92},{x:20,y:86},{x:2,y:84},{x:14,y:92},{x:24,y:90}],
+  'Zone 7': [{x:30,y:92},{x:36,y:93},{x:22,y:92},{x:42,y:92},{x:28,y:95},{x:38,y:95},{x:18,y:94},{x:44,y:94}],
 };
 
 const MAP_PORTS = [
@@ -934,11 +934,13 @@ function renderMap() {
   );
 
   // Group into squadrons: key = location|playerId|squadron
+  // Repairing ships always appear at their repairPort
   const groups = {};
   activeShips.forEach(([id, s]) => {
+    const effectiveLoc = (s.status === 'repairing' && s.repairPort) ? s.repairPort : s.location;
     const sqn = s.squadron || '';
-    const key = `${s.location}|||${s.player}|||${sqn}`;
-    if (!groups[key]) groups[key] = { location: s.location, playerId: s.player, faction: s.faction, squadron: sqn, ships: [] };
+    const key = `${effectiveLoc}|||${s.player}|||${sqn}`;
+    if (!groups[key]) groups[key] = { location: effectiveLoc, playerId: s.player, faction: s.faction, squadron: sqn, ships: [] };
     groups[key].ships.push({id, ...s});
   });
 
