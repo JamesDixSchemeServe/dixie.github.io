@@ -154,7 +154,21 @@
 
   .empty-state { text-align: center; padding: 32px; color: var(--text-muted); font-size: 0.9rem; }
 
-  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--surface2); border: 1px solid var(--accent); color: var(--text); padding: 10px 20px; border-radius: var(--radius); z-index: 500; font-size: 0.88rem; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+  /* Ship stats row */
+  .ship-stats { display:flex; flex-wrap:wrap; gap:0; margin-top:8px; border:1px solid var(--border); border-radius:4px; overflow:hidden; }
+  .ship-stat { flex:1; min-width:44px; padding:4px 6px; text-align:center; border-right:1px solid var(--border); }
+  .ship-stat:last-child { border-right:none; }
+  .ship-stat-sp { min-width:70px; }
+  .sp-adj-row { display:flex; align-items:center; justify-content:center; gap:4px; }
+  .sp-adj-btn { background:var(--surface); border:1px solid var(--border); color:var(--text-muted); border-radius:3px; width:18px; height:18px; font-size:0.75rem; cursor:pointer; line-height:1; display:flex; align-items:center; justify-content:center; padding:0; flex-shrink:0; }
+  .sp-adj-btn:hover { border-color:var(--accent); color:var(--accent); }
+    .ship-stat .ss-label { font-size:0.62rem; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); display:block; }
+  .ship-stat .ss-val { font-size:0.82rem; font-weight:bold; color:var(--text); display:block; }
+  .ss-red { color:var(--red) !important; }
+  .ss-yellow { color:var(--accent) !important; }
+  .ss-green { color:var(--green) !important; }
+
+    .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--surface2); border: 1px solid var(--accent); color: var(--text); padding: 10px 20px; border-radius: var(--radius); z-index: 500; font-size: 0.88rem; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
   .toast.show { opacity: 1; }
 
   /* Ship builder overlay */
@@ -243,12 +257,13 @@
     <div id="bldr-decks"></div>
     <button class="btn btn-ghost btn-sm" onclick="builderAddDeck()" style="margin-top:4px">+ Add Gun Deck</button>
 
-    <div class="section-label" style="margin-top:14px">Upgrades</div>
-    <div class="upgrade-grid" id="bldr-upgrades"></div>
 
     <div class="preview-bar" id="bldr-preview">
       <div class="preview-stat">SP: <span id="prev-sp">—</span></div>
       <div class="preview-stat">Broadsides: <span id="prev-broad">—</span></div>
+      <div class="preview-stat">Knots: <span id="prev-knots">—</span></div>
+      <div class="preview-stat">Turn: <span id="prev-turn">—</span></div>
+      <div class="preview-stat">Break: <span id="prev-break">—</span></div>
       <div class="preview-stat">Cost: <span id="prev-cost">—</span> pts</div>
     </div>
 
@@ -732,8 +747,17 @@ function shipCard(id, s) {
         <button class="btn btn-sm btn-ghost" onclick="openEditShip('${id}')">Edit</button>
       </div>
     </div>
-    <div class="ship-meta">
-      <span class="tag sp ${spClass}">SP ${s.spCurrent}/${s.spMax}</span>
+    <div class="ship-stats">
+      ${s.size       ? `<div class="ship-stat"><span class="ss-label">Size</span><span class="ss-val">${s.size}</span></div>` : ''}
+      ${s.bowChaser  ? `<div class="ship-stat"><span class="ss-label">Bow</span><span class="ss-val">${s.bowChaser}</span></div>` : ''}
+      ${s.broadsides ? `<div class="ship-stat"><span class="ss-label">Broadsides</span><span class="ss-val">${s.broadsides}</span></div>` : ''}
+      ${s.sternChaser? `<div class="ship-stat"><span class="ss-label">Stern</span><span class="ss-val">${s.sternChaser}</span></div>` : ''}
+      <div class="ship-stat ship-stat-sp"><span class="ss-label">SP</span><div class="sp-adj-row"><button class="sp-adj-btn" onclick="adjSP('${id}',-1)">−</button><span class="ss-val">${s.spCurrent}/${s.spMax}</span><button class="sp-adj-btn" onclick="adjSP('${id}',1)">+</button></div></div>
+      ${s.turnAngle  ? `<div class="ship-stat"><span class="ss-label">Turn</span><span class="ss-val ss-${(s.turnAngle||'').toLowerCase()}">${s.turnAngle}</span></div>` : ''}
+      ${s.knots      ? `<div class="ship-stat"><span class="ss-label">Knots</span><span class="ss-val">${s.knots}</span></div>` : ''}
+      ${s.breakValue ? `<div class="ship-stat"><span class="ss-label">Break</span><span class="ss-val">${s.breakValue}</span></div>` : ''}
+    </div>
+        <div class="ship-meta">
       <span class="tag ${crewClass}">${s.crewLevel} Crew</span>
       <span class="tag">${s.location}</span>
       ${s.battlesWithoutStriking > 0 ? `<span class="tag">${s.battlesWithoutStriking} battle${s.battlesWithoutStriking>1?'s':''}</span>` : ''}
@@ -912,6 +936,24 @@ function shipFormHtml(s) {
       <div class="form-row"><label>Repair Cost Paid</label><input type="number" id="sf-repairCost" value="${s.repairCostPaid||0}"></div>
     </div>
     <div class="form-row"><label>Available in Turn</label><input id="sf-available" value="${s.availableIn||''}"></div>
+    <div class="section-label" style="margin-top:8px">Combat Stats <span style="font-size:0.7rem;color:var(--text-muted);text-transform:none">(auto-filled by builder)</span></div>
+    <div class="form-grid">
+      <div class="form-row"><label>Size</label><select id="sf-size">
+        ${['','XL','L','M','S','T'].map(v=>`<option value="${v}"${s.size===v?' selected':''}>${v||'—'}</option>`).join('')}
+      </select></div>
+      <div class="form-row"><label>Turn Angle</label><select id="sf-turn">
+        ${['','Red','Yellow','Green'].map(v=>`<option value="${v}"${s.turnAngle===v?' selected':''}>${v||'—'}</option>`).join('')}
+      </select></div>
+    </div>
+    <div class="form-grid">
+      <div class="form-row"><label>Knots</label><input type="number" id="sf-knots" value="${s.knots||''}" min="1" max="10"></div>
+      <div class="form-row"><label>Break Value</label><input type="number" id="sf-break" value="${s.breakValue||''}" min="1"></div>
+    </div>
+    <div class="form-grid">
+      <div class="form-row"><label>Broadsides</label><input id="sf-broadsides" value="${s.broadsides||''}" placeholder="e.g. 3M-2L"></div>
+      <div class="form-row"><label>Stern Chaser</label><input id="sf-stern" value="${s.sternChaser||''}" placeholder="e.g. 1L or -"></div>
+    </div>
+    <div class="form-row"><label>Bow Chaser</label><input id="sf-bow" value="${s.bowChaser||''}" placeholder="e.g. 1L or -"></div>
     <div class="form-row"><label>Sunk By</label><select id="sf-sunkBy">
       <option value="">(none)</option>
       <option value="__accident__"${s.sunkBy==='__accident__'?' selected':''}>Accident</option>
@@ -961,6 +1003,13 @@ function readShipForm(existing) {
     capturedBy: document.getElementById('sf-capturedBy').value || '',
     player: document.getElementById('sf-player').value || existing.player,
     notes: document.getElementById('sf-notes').value.trim(),
+    size:        document.getElementById('sf-size').value||undefined,
+    turnAngle:   document.getElementById('sf-turn').value||undefined,
+    knots:       parseInt(document.getElementById('sf-knots').value)||undefined,
+    breakValue:  parseInt(document.getElementById('sf-break').value)||undefined,
+    broadsides:  document.getElementById('sf-broadsides').value.trim()||undefined,
+    sternChaser: document.getElementById('sf-stern').value.trim()||undefined,
+    bowChaser:   document.getElementById('sf-bow').value.trim()||undefined,
   };
 }
 
@@ -978,18 +1027,10 @@ window.openEditShip = function(id) {
 };
 
 // ─── SHIP BUILDER ─────────────────────────────────────────────────────────────
-const BUILDER_UPGRADES = [
-  { id:'sturdy',         name:'Sturdy',         cost:{XL:120,L:80,M:50,S:30,T:15}, excludes:[] },
-  { id:'over_gunned',    name:'Over Gunned',     cost:{XL:80,L:65,M:45,S:0,T:0},   excludes:['carronade_refit'], sizes:['XL','L','M'] },
-  { id:'master_gunner',  name:'Master Gunner',   cost:{XL:150,L:120,M:80,S:50,T:30},excludes:[] },
-  { id:'marines',        name:'Marines',         cost:{XL:60,L:45,M:30,S:20,T:10}, excludes:['privateer'] },
-  { id:'privateer',      name:'Privateer',       cost:{XL:0,L:40,M:30,S:20,T:10},  excludes:['marines'], sizes:['L','M','S','T'] },
-  { id:'carronade_refit',name:'Carronade Refit', cost:{XL:80,L:65,M:45,S:30,T:20}, excludes:['over_gunned'] },
-];
 const CALIBERS = [4,6,9,12,18,24,32,36,42];
 let _bldrDecks = [];
 let _bldrDeckId = 3;
-let _bldrPlayer = null, _bldrFaction = null, _bldrUpgrades = [];
+let _bldrPlayer = null, _bldrFaction = null;
 
 function _bSize(type) {
   const t = type.toLowerCase();
@@ -1024,56 +1065,71 @@ function _bBroadsides(decks) {
 function _bChasers(decks) {
   const vals={H:15,M:10,L:5,HC:20,C:15,LC:5};
   let total=0;
-  const sides=['bow','stern'];
-  for (const side of sides) {
+  for (const side of ['bow','stern']) {
     let guns=0,cal=9,t='long';
     for (const d of decks) { if(d.name.toLowerCase().includes(side)){guns+=d.guns;cal=d.caliber;t=d.type;} }
     if(guns>0){ const dice=Math.max(1,Math.round(guns/2/5)); total+=dice*(vals[_bCat(cal,t)]||5); }
   }
   return total;
 }
+function _bChaserStr(decks, side) {
+  let guns=0,cal=9,t='long';
+  for (const d of decks) { if(d.name.toLowerCase().includes(side)){guns+=d.guns;cal=d.caliber;t=d.type;} }
+  if(!guns) return '-';
+  const dice=Math.max(1,Math.round(guns/2/5));
+  return dice+_bCat(cal,t);
+}
+function _bTurn(type) {
+  const t=type.toLowerCase();
+  if(t.includes('1st rate')||t.includes('2nd rate')||t.includes('merchantman')||t.includes('east indiaman')||t.includes('manila galleon')) return 'Yellow';
+  if(t.includes('galley')||t.includes('galiot')||t.includes('gunboat')||t.includes('felucca')) return 'Green';
+  return 'Red';
+}
+function _bKnots(type, fast) {
+  const t=type.toLowerCase();
+  let base=5;
+  if(t.includes('1st rate')||t.includes('2nd rate')) base=3;
+  else if(t.includes('3rd rate')||t.includes('4th rate')) base=4;
+  else if(t.includes('cutter')||t.includes('schooner')||t.includes('felucca')) base=6;
+  return base+(fast?1:0);
+}
+function _bBreak(sp, type) {
+  const t=type.toLowerCase();
+  let div=4.5;
+  if(t.includes('1st rate')||t.includes('2nd rate')||t.includes('3rd rate')) div=3.5;
+  else if(t.includes('4th rate')||t.includes('5th rate')||t.includes('heavy frigate')||t.includes('razee')||t.includes('frigate')) div=4;
+  return Math.ceil(sp/div);
+}
 function _round5(n) { return Math.round(n/5)*5; }
 
 function builderCalc() {
-  const guns        = parseInt(document.getElementById('bldr-guns').value)||0;
-  const type        = document.getElementById('bldr-type').value||'';
-  const crew        = document.getElementById('bldr-crew').value;
-  const fastSailer  = document.getElementById('bldr-fastsailer').checked;
-  const swivels     = document.getElementById('bldr-swivels').checked;
-  const size        = _bSize(type);
+  const guns       = parseInt(document.getElementById('bldr-guns').value)||0;
+  const type       = document.getElementById('bldr-type').value||'';
+  const crew       = document.getElementById('bldr-crew').value;
+  const fastSailer = document.getElementById('bldr-fastsailer').checked;
+  const swivels    = document.getElementById('bldr-swivels').checked;
 
-  const sp = Math.round(guns*1.25);
+  const sp    = Math.round(guns*1.25);
   const parts = _bBroadsides(_bldrDecks);
-
-  // Base cost: SP*4 + broadsides + chasers
   let base = sp*4;
   for (const p of parts) base += p.dice*p.val;
   base += _bChasers(_bldrDecks);
-
-  // Swivel guns flat cost
-  if (swivels) base += 15;
-
-  // Fast Sailer: +12% of base
-  if (fastSailer) base = Math.round(base * 1.12);
-
-  // Round to nearest 5
+  if (swivels)    base += 15;
+  if (fastSailer) base = Math.round(base*1.12);
   base = _round5(base);
-
-  // Crew modifier
   const crewMod = {Inexperienced:-0.20,Regular:0,Veteran:0.20};
-  let cost = Math.round(base*(1+(crewMod[crew]||0)));
+  const cost  = Math.round(base*(1+(crewMod[crew]||0)));
+  const broad = parts.length ? parts.map(p=>p.dice+p.cat).join('-') : '—';
+  const knots = _bKnots(type, fastSailer);
+  const turn  = _bTurn(type);
+  const brk   = _bBreak(sp, type);
 
-  // Upgrades (added after crew modifier)
-  for (const uid of _bldrUpgrades) {
-    const u = BUILDER_UPGRADES.find(x=>x.id===uid);
-    if (u) cost += (u.cost[size]||0);
-  }
-
-  const broadStr = parts.length ? parts.map(p=>p.dice+p.cat).join('-') : '—';
   document.getElementById('prev-sp').textContent    = sp;
-  document.getElementById('prev-broad').textContent = broadStr;
+  document.getElementById('prev-broad').textContent = broad;
+  document.getElementById('prev-knots').textContent = knots;
+  document.getElementById('prev-turn').textContent  = turn;
+  document.getElementById('prev-break').textContent = brk;
   document.getElementById('prev-cost').textContent  = cost;
-  _renderUpgrades(size);
 }
 
 function _renderDecks() {
@@ -1090,54 +1146,35 @@ function _renderDecks() {
     </div>`).join('');
 }
 
-function _renderUpgrades(size) {
-  document.getElementById('bldr-upgrades').innerHTML = BUILDER_UPGRADES.map(u => {
-    const allowed  = !u.sizes || u.sizes.includes(size);
-    const cost     = u.cost[size]||0;
-    const excluded = !_bldrUpgrades.includes(u.id) && u.excludes.some(id=>_bldrUpgrades.includes(id));
-    const checked  = _bldrUpgrades.includes(u.id);
-    const disabled = !allowed || excluded;
-    return `<label class="upgrade-item${disabled?' disabled':''}">
-      <input type="checkbox" ${checked?'checked':''} ${disabled?'disabled':''} onchange="builderToggleUpgrade('${u.id}',this.checked)">
-      <span>${u.name}</span><span style="color:var(--text-muted);font-size:0.72rem;margin-left:auto">+${cost}</span>
-    </label>`;
-  }).join('');
-}
-
 window.builderDeckUpdate = function(id, field, val) {
-  const d = _bldrDecks.find(x=>x.id===id); if(d) d[field]=val; builderCalc();
+  const d=_bldrDecks.find(x=>x.id===id); if(d) d[field]=val; builderCalc();
 };
 window.builderRemoveDeck = function(id) {
-  if (_bldrDecks.length<=1) return;
-  _bldrDecks = _bldrDecks.filter(d=>d.id!==id);
+  if(_bldrDecks.length<=1) return;
+  _bldrDecks=_bldrDecks.filter(d=>d.id!==id);
   _renderDecks(); builderCalc();
 };
 window.builderAddDeck = function() {
   _bldrDecks.push({id:_bldrDeckId++,name:'',guns:10,caliber:9,type:'long'});
   _renderDecks(); builderCalc();
 };
-window.builderToggleUpgrade = function(id, on) {
-  if (on) _bldrUpgrades.push(id);
-  else _bldrUpgrades = _bldrUpgrades.filter(x=>x!==id);
-  builderCalc();
-};
-window.closeBuilder  = function() { document.getElementById('builder-overlay').style.display='none'; };
+window.closeBuilder = function() { document.getElementById('builder-overlay').style.display='none'; };
 window.builderOverlayClick = function(e) { if(e.target===document.getElementById('builder-overlay')) closeBuilder(); };
 
 function openBuilder(playerId, faction) {
-  _bldrPlayer = playerId; _bldrFaction = faction;
-  _bldrDecks = [{id:1,name:'Main Deck',guns:26,caliber:18,type:'long'},{id:2,name:'QD/FC',guns:10,caliber:9,type:'long'}];
-  _bldrDeckId = 3; _bldrUpgrades = [];
-  const sel = document.getElementById('bldr-type');
-  sel.innerHTML = SHIP_TYPES.map(t=>`<option>${t}</option>`).join('');
-  sel.value = '5th Rate Frigate';
-  document.getElementById('bldr-name').value = '';
-  document.getElementById('bldr-guns').value = 36;
-  document.getElementById('bldr-crew').value = 'Regular';
-  document.getElementById('bldr-fastsailer').checked = false;
-  document.getElementById('bldr-swivels').checked    = false;
+  _bldrPlayer=playerId; _bldrFaction=faction;
+  _bldrDecks=[{id:1,name:'Main Deck',guns:26,caliber:18,type:'long'},{id:2,name:'QD/FC',guns:10,caliber:9,type:'long'}];
+  _bldrDeckId=3;
+  const sel=document.getElementById('bldr-type');
+  sel.innerHTML=SHIP_TYPES.map(t=>`<option>${t}</option>`).join('');
+  sel.value='5th Rate Frigate';
+  document.getElementById('bldr-name').value='';
+  document.getElementById('bldr-guns').value=36;
+  document.getElementById('bldr-crew').value='Regular';
+  document.getElementById('bldr-fastsailer').checked=false;
+  document.getElementById('bldr-swivels').checked=false;
   _renderDecks(); builderCalc();
-  document.getElementById('builder-overlay').style.display = 'flex';
+  document.getElementById('builder-overlay').style.display='flex';
 }
 
 window.builderCreateShip = function() {
@@ -1149,13 +1186,18 @@ window.builderCreateShip = function() {
   const broad = document.getElementById('prev-broad').textContent;
   const fast  = document.getElementById('bldr-fastsailer').checked;
   const swiv  = document.getElementById('bldr-swivels').checked;
-  const upgStr = _bldrUpgrades.join(', ');
-  const noteParts = [`Broadsides: ${broad}`];
-  if (fast) noteParts.push('Fast Sailer');
-  if (swiv) noteParts.push('Swivel Guns');
-  if (upgStr) noteParts.push(upgStr);
+  const knots = parseInt(document.getElementById('prev-knots').textContent)||undefined;
+  const turn  = document.getElementById('prev-turn').textContent;
+  const brk   = parseInt(document.getElementById('prev-break').textContent)||undefined;
+  const size  = _bSize(type);
+  const stern = _bChaserStr(_bldrDecks,'stern');
+  const bow   = _bChaserStr(_bldrDecks,'bow');
+  const noteParts=[];
+  if(fast) noteParts.push('Fast Sailer');
+  if(swiv) noteParts.push('Swivel Guns');
   closeBuilder();
   const blank = { player:_bldrPlayer, faction:_bldrFaction, name, type, cost, spCurrent:sp, spMax:sp,
+    size, broadsides:broad, sternChaser:stern, bowChaser:bow, turnAngle:turn, knots, breakValue:brk,
     location:'', squadron:'', crewLevel:crew, status:'active', battlesWithoutStriking:0,
     officer:'', repairPort:'', repairCostPaid:0, availableIn:'', notes:noteParts.join(' · ') };
   showModal(`<button class="modal-close" onclick="closeModal()">&#x2715;</button>
@@ -1171,6 +1213,13 @@ window.openAddShip = function(playerId, faction) {
   openBuilder(playerId, faction);
 };
 
+
+window.adjSP = async function(id, delta) {
+  const s = (appData.ships || {})[id];
+  if (!s) return;
+  const newVal = Math.max(0, Math.min(s.spMax, (s.spCurrent || 0) + delta));
+  await update(ref(db, `/ships/${id}`), { spCurrent: newVal });
+};
 
 window.saveShip = async function(id) {
   const existing = (appData.ships || {})[id];
