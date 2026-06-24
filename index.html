@@ -928,57 +928,63 @@ function renderMap() {
   const players = appData.players || {};
   const FC = { British:'#c73535', French:'#2255a8', Spanish:'#8822a0' };
 
-  // Group ships by location
-  const byLocation = {};
-  Object.entries(ships).forEach(([id,s]) => {
+  // Group into squadrons: key = location|playerId|squadron
+  const groups = {};
+  Object.entries(ships).forEach(([id, s]) => {
     if (!s.location) return;
-    byLocation[s.location] = byLocation[s.location] || [];
-    byLocation[s.location].push({id,...s});
+    const sqn = s.squadron || '';
+    const key = `${s.location}|||${s.player}|||${sqn}`;
+    if (!groups[key]) groups[key] = { location: s.location, playerId: s.player, faction: s.faction, squadron: sqn, ships: [] };
+    groups[key].ships.push({id, ...s});
   });
 
   const bubbles = [];
+  const locCounters = {};
 
-  // Ships at a named port — stack in a tight cluster offset from port anchor
-  Object.entries(MAP_PORT_POS).forEach(([portName, pos]) => {
-    const list = byLocation[portName] || [];
-    list.forEach((ship, i) => {
-      const col = (i % 3) - 1;   // -1, 0, +1 columns
-      const row = Math.floor(i / 3);
-      bubbles.push({
-        x: pos.x + col * 5,
-        y: pos.y + 4 + row * 5,  // push down slightly below anchor icon
-        ship, loc: portName, atPort: true,
-      });
-    });
-  });
+  Object.values(groups).forEach(grp => {
+    const loc = grp.location;
+    const idx = locCounters[loc] = (locCounters[loc] || 0);
+    locCounters[loc]++;
 
-  // Ships at sea in a zone — spread across pre-defined zone slots
-  const zoneCounters = {};
-  Object.entries(byLocation).forEach(([loc, list]) => {
-    const slots = MAP_ZONE_SLOTS[loc];
-    if (!slots) return;
-    list.forEach(ship => {
-      const idx = zoneCounters[loc] = (zoneCounters[loc] || 0);
-      zoneCounters[loc]++;
-      const pos = slots[idx % slots.length];
-      bubbles.push({ x: pos.x, y: pos.y, ship, loc, atPort: false });
-    });
+    let x, y, atPort;
+    const portPos = MAP_PORT_POS[loc];
+    if (portPos) {
+      // At a named port: arrange groups in a row below the anchor
+      x = portPos.x + (idx - 0.5) * 8;
+      y = portPos.y + 5 + idx * 1.5;
+      atPort = true;
+    } else {
+      const slots = MAP_ZONE_SLOTS[loc] || [];
+      const pos = slots[idx % slots.length] || { x: 30, y: 50 };
+      x = pos.x; y = pos.y; atPort = false;
+    }
+
+    const p = players[grp.playerId] || {};
+    const playerShort = (p.name || grp.playerId || '?').slice(0, 8);
+    const sqnLabel = grp.squadron ? ` ${grp.squadron}` : '';
+    const label = `${playerShort}${sqnLabel}`;
+    const col = FC[grp.faction] || '#555';
+    const flag = FACTION_FLAG[grp.faction] || '';
+    const shipCount = grp.ships.length;
+    const hasRepair = grp.ships.some(s => s.status === 'repairing');
+    const hasDamaged = grp.ships.some(s => s.spCurrent < s.spMax * 0.5);
+    const statusIcon = hasRepair ? ' ⚓' : hasDamaged ? ' ⚡' : '';
+
+    const encodedKey = encodeURIComponent(`${grp.location}|||${grp.playerId}|||${grp.squadron}`);
+    bubbles.push({ x, y, atPort, col, label, flag, shipCount, statusIcon, encodedKey });
   });
 
   const bubbleHtml = bubbles.map(b => {
-    const col = FC[b.ship.faction] || '#555';
-    const p = players[b.ship.player] || {};
-    const label = b.ship.name.length > 12 ? b.ship.name.slice(0,11) + '…' : b.ship.name;
-    const statusIcon = b.ship.status === 'repairing' ? ' ⚓' : b.ship.status === 'sunk' ? ' †' : b.ship.status === 'captured' ? ' ⛓' : '';
-    const border = b.atPort ? '2px solid rgba(255,255,255,0.6)' : '2px solid white';
-    const shadow = b.atPort ? '0 1px 3px rgba(0,0,0,0.35)' : '0 1px 5px rgba(0,0,0,0.5)';
-    const title = `${b.ship.name} · ${b.ship.type||''} · ${p.name||''} · ${b.loc}`;
-    return `<div onclick="mapBubbleClick('${b.ship.id}')" title="${title.replace(/'/g,'&#39;')}"
+    const border = b.atPort ? '2px solid rgba(255,255,255,0.55)' : '2px solid white';
+    const shadow = b.atPort ? '0 1px 3px rgba(0,0,0,0.3)' : '0 2px 6px rgba(0,0,0,0.45)';
+    const opacity = b.atPort ? 0.85 : 1;
+    return `<div onclick="mapGroupClick('${b.encodedKey}')"
       style="position:absolute;left:${b.x}%;top:${b.y}%;transform:translate(-50%,-50%);
-             background:${col};color:white;border:${border};border-radius:16px;
-             padding:2px 7px;font-size:0.62rem;font-weight:700;cursor:pointer;
-             white-space:nowrap;box-shadow:${shadow};z-index:10;line-height:1.5;
-             opacity:${b.atPort?0.82:1}">${label}${statusIcon}</div>`;
+             background:${b.col};color:white;border:${border};border-radius:16px;
+             padding:2px 8px;font-size:0.65rem;font-weight:700;cursor:pointer;
+             white-space:nowrap;box-shadow:${shadow};z-index:10;line-height:1.6;opacity:${opacity}">
+      ${b.flag} ${b.label} <span style="opacity:0.75;font-weight:400">(${b.shipCount})</span>${b.statusIcon}
+    </div>`;
   }).join('');
 
   return `<div style="position:relative;max-width:663px;margin:0 auto;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:#7aa8c0">
@@ -991,21 +997,41 @@ function renderMap() {
   </div>`;
 }
 
-window.mapBubbleClick = function(shipId) {
-  const ship = (appData.ships || {})[shipId];
-  if (!ship) return;
-  const p = (appData.players || {})[ship.player] || {};
-  const flag = FACTION_FLAG[ship.faction] || '';
+window.mapGroupClick = function(encodedKey) {
+  const [loc, playerId, squadron] = decodeURIComponent(encodedKey).split('|||');
+  const ships = appData.ships || {};
+  const players = appData.players || {};
+  const p = players[playerId] || {};
+  const flag = FACTION_FLAG[p.faction] || '';
+
+  const groupShips = Object.entries(ships).filter(([,s]) =>
+    s.location === loc && s.player === playerId && (s.squadron || '') === squadron
+  );
+
+  const sqnLabel = squadron ? ` — Squadron ${squadron}` : '';
+  const officers = [...new Set(groupShips.map(([,s]) => s.officer).filter(Boolean))];
+
+  const shipRows = groupShips.map(([id, s]) => {
+    const statusBadge = s.status && s.status !== 'active'
+      ? `<span style="color:var(--text-muted);font-size:0.75rem"> (${s.status})</span>` : '';
+    const sp = `<span style="color:var(--text-muted);font-size:0.75rem"> ${s.spCurrent}/${s.spMax} SP</span>`;
+    return `<div style="padding:5px 0;border-bottom:1px solid var(--border);font-size:0.85rem">
+      ${s.name}${statusBadge}${sp}
+      <span style="color:var(--text-muted);font-size:0.75rem;margin-left:4px">${s.type||''}</span>
+    </div>`;
+  }).join('');
+
   showModal(`<button class="modal-close" onclick="closeModal()">×</button>
-    <h2>${flag} ${ship.name}</h2>
-    <div class="stat-row"><span class="stat-label">Type</span><span class="stat-value">${ship.type||'—'}</span></div>
-    <div class="stat-row"><span class="stat-label">Player</span><span class="stat-value">${p.name||ship.player||'—'}</span></div>
-    <div class="stat-row"><span class="stat-label">Location</span><span class="stat-value">${ship.location||'—'}</span></div>
-    <div class="stat-row"><span class="stat-label">Status</span><span class="stat-value">${ship.status||'active'}</span></div>
-    <div class="stat-row"><span class="stat-label">SP</span><span class="stat-value">${ship.spCurrent||0} / ${ship.spMax||0}</span></div>
+    <h2>${flag} ${p.name || playerId}${sqnLabel}</h2>
+    <div class="stat-row"><span class="stat-label">Faction</span><span class="stat-value">${p.faction||'—'}</span></div>
+    <div class="stat-row"><span class="stat-label">Location</span><span class="stat-value">${loc}</span></div>
+    ${p.officerName ? `<div class="stat-row"><span class="stat-label">Officer</span><span class="stat-value">${p.officerName}</span></div>` : ''}
+    ${officers.length ? `<div class="stat-row"><span class="stat-label">Ship Officers</span><span class="stat-value">${officers.join(', ')}</span></div>` : ''}
+    <div class="section-label" style="margin-top:14px">Ships (${groupShips.length})</div>
+    ${shipRows}
     <div style="margin-top:14px;display:flex;justify-content:flex-end;gap:8px">
       <button class="btn btn-ghost" onclick="closeModal()">Close</button>
-      <button class="btn" onclick="closeModal();showTab('${ship.player||'overview'}')">Go to Player</button>
+      <button class="btn" onclick="closeModal();showTab('${playerId}')">Go to Player</button>
     </div>`);
 };
 
