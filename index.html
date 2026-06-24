@@ -97,6 +97,14 @@
   /* SP bar */
   .sp-bar-wrap { margin-top: 6px; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
   .sp-bar { height: 100%; border-radius: 2px; transition: width 0.3s; }
+  .game-stat-bar { display: flex; flex-wrap: wrap; gap: 0; margin-top: 8px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .gs-item { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; align-items: center; padding: 4px 8px; border-right: 1px solid var(--border); }
+  .gs-item:last-child { border-right: none; }
+  .gs-label { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); white-space: nowrap; }
+  .gs-val { font-size: 0.8rem; font-weight: 600; white-space: nowrap; }
+  .gs-sp { display: flex; align-items: center; gap: 3px; }
+  .gs-btn { background: none; border: 1px solid var(--border); border-radius: 3px; color: var(--text); cursor: pointer; font-size: 0.75rem; padding: 0 5px; line-height: 1.4; }
+  .gs-btn:hover { background: var(--surface3); }
 
   /* Modal */
   .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200; display: flex; align-items: flex-end; justify-content: center; }
@@ -223,52 +231,6 @@
   <div class="modal" id="modal-content"></div>
 </div>
 
-<!-- Ship Builder Overlay -->
-<div id="builder-overlay" class="builder-overlay" style="display:none" onclick="builderOverlayClick(event)">
-  <div class="builder-modal" id="builder-modal">
-    <button class="modal-close" onclick="closeBuilder()">&#x2715;</button>
-    <h2>&#x2693; Ship Builder</h2>
-    <p class="subtitle">Design your ship. Stats carry through to the fleet automatically.</p>
-
-    <div class="form-grid">
-      <div class="form-row"><label>Ship Name</label><input id="bldr-name" placeholder="e.g. HMS Badger"></div>
-      <div class="form-row"><label>Ship Type</label><select id="bldr-type" onchange="builderCalc()"></select></div>
-    </div>
-    <div class="form-grid">
-      <div class="form-row"><label>Total Guns</label><input type="number" id="bldr-guns" value="36" min="0" max="120" oninput="builderCalc()"></div>
-      <div class="form-row"><label>Crew Experience</label><select id="bldr-crew" onchange="builderCalc()">
-        <option>Inexperienced</option><option selected>Regular</option><option>Veteran</option>
-      </select></div>
-    </div>
-
-    <div class="section-label" style="margin-top:14px">Ship Variations</div>
-    <div style="display:flex;gap:12px;flex-wrap:wrap">
-      <label class="upgrade-item"><input type="checkbox" id="bldr-fastsailer" onchange="builderCalc()"> <span>Fast Sailer</span><span style="color:var(--text-muted);font-size:0.72rem;margin-left:6px">+1 knot (+12% cost)</span></label>
-      <label class="upgrade-item"><input type="checkbox" id="bldr-swivels" onchange="builderCalc()"> <span>Swivel Guns</span><span style="color:var(--text-muted);font-size:0.72rem;margin-left:6px">+15 pts, +boarding</span></label>
-    </div>
-
-    <div class="section-label" style="margin-top:14px">Armament</div>
-    <div class="deck-header">
-      <label>Deck Name</label><label>Guns</label><label>Caliber</label><label>Type</label><label></label>
-    </div>
-    <div id="bldr-decks"></div>
-    <button class="btn btn-ghost btn-sm" onclick="builderAddDeck()" style="margin-top:4px">+ Add Gun Deck</button>
-
-    <div class="section-label" style="margin-top:14px">Upgrades</div>
-    <div class="upgrade-grid" id="bldr-upgrades"></div>
-
-    <div class="preview-bar" id="bldr-preview">
-      <div class="preview-stat">SP: <span id="prev-sp">—</span></div>
-      <div class="preview-stat">Broadsides: <span id="prev-broad">—</span></div>
-      <div class="preview-stat">Cost: <span id="prev-cost">—</span> pts</div>
-    </div>
-
-    <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeBuilder()">Cancel</button>
-      <button class="btn" onclick="builderCreateShip()">Create Ship &rarr;</button>
-    </div>
-  </div>
-</div>
 
 <div class="toast" id="toast"></div>
 
@@ -723,6 +685,42 @@ function renderFaction(faction) {
   return html;
 }
 
+// ─── SHIP STAT HELPERS ────────────────────────────────────────────────────────
+function _shipSize(type) {
+  const t=(type||'').toLowerCase();
+  if(t.includes('1st rate')||t.includes('2nd rate')) return 'XL';
+  if(t.includes('3rd rate')||t.includes('4th rate')||t.includes('heavy frigate')||t.includes('razee')||t.includes('east indiaman')||t.includes('manila galleon')) return 'L';
+  if(t.includes('5th rate')||t.includes('6th rate')||t.includes('frigate')||t.includes('merchantman')) return 'M';
+  if(t.includes('brig')||t.includes('sloop')||t.includes('corvette')||t.includes('schooner')||t.includes('xebec')||t.includes('polacre')||t.includes('privateer')||t.includes('letter of marque')||t.includes('packet')) return 'S';
+  return 'T';
+}
+function _shipTurn(type) {
+  const t=(type||'').toLowerCase();
+  if(t.includes('east indiaman')||t.includes('manila galleon')||t.includes('merchantman')) return 'Yellow';
+  if(t.includes('galley')||t.includes('gunboat')||t.includes('bomb')) return 'Green';
+  return 'Red';
+}
+function _shipKnots(type, fastSailer) {
+  const t=(type||'').toLowerCase();
+  let b=5;
+  if(t.includes('1st rate')||t.includes('2nd rate')) b=3;
+  else if(t.includes('3rd rate')||t.includes('4th rate')) b=4;
+  else if(t.includes('heavy frigate')||t.includes('razee')||t.includes('east indiaman')||t.includes('manila galleon')||t.includes('merchantman')) b=4;
+  else if(t.includes('cutter')||t.includes('schooner')) b=6;
+  return fastSailer?b+1:b;
+}
+function _shipBreak(type, spMax) {
+  const t=(type||'').toLowerCase();
+  const d=t.includes('1st rate')||t.includes('2nd rate')||t.includes('3rd rate')?3.5:t.includes('4th rate')||t.includes('5th rate')||t.includes('heavy frigate')?4:4.5;
+  return Math.max(1,Math.round((spMax||0)/d));
+}
+const CHASER_LABELS={'L':'Lt.LG','M':'Med.LG','H':'Hvy.LG','LC':'Lt.Carr','C':'Carr','HC':'Hvy.Carr'};
+window.shipSpAdj = async function(id, delta) {
+  const s=(appData.ships||{})[id]; if(!s) return;
+  const n=Math.max(0,Math.min(s.spMax,(s.spCurrent||0)+delta));
+  await update(ref(db,`/ships/${id}`),{spCurrent:n});
+};
+
 function shipCard(id, s) {
   const pct = s.spMax > 0 ? s.spCurrent / s.spMax : 1;
   const spClass = pct <= 0.25 ? 'critical' : pct <= 0.5 ? 'damaged' : '';
@@ -755,11 +753,15 @@ function shipCard(id, s) {
     captureLines += `<div class="ship-notes" style="color:var(--green)">🏆 Captured: ${prizes.map(([,ps]) => ps.name).join(', ')}</div>`;
   }
 
+  const totalGuns = (s.decks||[]).reduce((sum,d)=>sum+(d.guns||0),0);
+  const broadCats = ['H','M','L','HC','C','LC'];
+  const broadStr  = s.broadside ? broadCats.filter(c=>s.broadside[c]>0).map(c=>s.broadside[c]+c).join('-') : '';
+
   return `<div class="ship-card ${s.status}" id="sc-${id}">
     <div class="ship-top">
       <div>
         <div class="ship-name">${s.name}</div>
-        <div class="ship-type">${s.type}${s.officer ? ` · <em>${s.officer}</em>` : ''}</div>
+        <div class="ship-type">${totalGuns>0?totalGuns+' gun ':' '}${s.type}${s.officer ? ` · <em>${s.officer}</em>` : ''}</div>
         ${s.squadron ? `<div class="squadron-label">Squadron ${s.squadron}</div>` : ''}
       </div>
       <div class="ship-actions">
@@ -768,13 +770,26 @@ function shipCard(id, s) {
     </div>
     <div class="ship-meta">
       <span class="tag sp ${spClass}">SP ${s.spCurrent}/${s.spMax}</span>
+      ${broadStr ? `<span class="tag" style="color:var(--accent)">${broadStr}</span>` : ''}
       <span class="tag ${crewClass}">${s.crewLevel} Crew</span>
       <span class="tag">${s.location}</span>
+      ${s.fastSailer ? `<span class="tag" style="color:#7ec8e3">⚡ Fast</span>` : ''}
+      ${s.swivels ? `<span class="tag" style="color:#e8a44a">🔫 Swivels</span>` : ''}
       ${s.battlesWithoutStriking > 0 ? `<span class="tag">${s.battlesWithoutStriking} battle${s.battlesWithoutStriking>1?'s':''}</span>` : ''}
       ${s.repairPort ? `<span class="tag" style="color:var(--accent2)">⚓ ${s.repairPort}</span>` : ''}
       ${s.availableIn ? `<span class="tag" style="color:var(--accent)">Avail. ${s.availableIn}</span>` : ''}
     </div>
     <div class="sp-bar-wrap"><div class="sp-bar" style="width:${Math.max(0,pct*100)}%;background:${barColor}"></div></div>
+    <div class="game-stat-bar">
+      <div class="gs-item"><div class="gs-label">Size</div><div class="gs-val">${_shipSize(s.type)}</div></div>
+      <div class="gs-item"><div class="gs-label">Broadsides</div><div class="gs-val" style="color:var(--accent)">${broadStr||'—'}</div></div>
+      <div class="gs-item"><div class="gs-label">Bow</div><div class="gs-val">${CHASER_LABELS[s.bowChaser]||'—'}</div></div>
+      <div class="gs-item"><div class="gs-label">Stern</div><div class="gs-val">${CHASER_LABELS[s.sternChaser]||'—'}</div></div>
+      <div class="gs-item"><div class="gs-label">SP</div><div class="gs-val gs-sp"><button class="gs-btn" onclick="shipSpAdj('${id}',-1)">−</button><span>${s.spCurrent}/${s.spMax}</span><button class="gs-btn" onclick="shipSpAdj('${id}',1)">+</button></div></div>
+      <div class="gs-item"><div class="gs-label">Turn</div><div class="gs-val" style="color:${_shipTurn(s.type)==='Red'?'var(--red)':_shipTurn(s.type)==='Yellow'?'#f4c430':'var(--green)'}">${_shipTurn(s.type)}</div></div>
+      <div class="gs-item"><div class="gs-label">Knots</div><div class="gs-val">${_shipKnots(s.type, s.fastSailer)}</div></div>
+      <div class="gs-item"><div class="gs-label">Break</div><div class="gs-val">${_shipBreak(s.type, s.spMax)}</div></div>
+    </div>
     ${captureLines}
     ${s.previousName ? `<div class="ship-notes" style="color:var(--text-muted)">Formerly: ${s.previousName}</div>` : ''}
     ${s.notes ? `<div class="ship-notes">${s.notes}</div>` : ''}
@@ -963,6 +978,31 @@ function shipFormHtml(s) {
       <div class="form-row"><label>SP Current</label><input type="number" id="sf-spCurrent" value="${s.spCurrent||0}" min="0"></div>
       <div class="form-row"><label>SP Max</label><input type="number" id="sf-spMax" value="${s.spMax||0}" min="1"></div>
     </div>
+
+    <div class="section-label" style="margin-top:14px">Armament</div>
+    <div class="deck-header"><label>Deck Name</label><label>Guns</label><label>Caliber</label><label>Type</label><label></label></div>
+    <div id="as-decks"></div>
+    <button class="btn btn-ghost btn-sm" onclick="asAddDeck()" style="margin-top:4px">+ Add Gun Deck</button>
+
+    <div class="section-label" style="margin-top:14px">Broadside Dice <span style="font-size:0.72rem;color:var(--text-muted);font-weight:400">(adjust as needed)</span></div>
+    <div id="as-broad-grid" style="display:flex;flex-wrap:wrap;gap:4px 24px;margin-top:8px"></div>
+
+    <div class="section-label" style="margin-top:14px">Options</div>
+    <div style="display:flex;gap:20px;flex-wrap:wrap">
+      <label class="upgrade-item"><input type="checkbox" id="as-fastsailer"${s.fastSailer?' checked':''}> <span>Fast Sailer</span><span style="color:var(--text-muted);font-size:0.72rem;margin-left:6px">(+1 knot, +12% cost)</span></label>
+      <label class="upgrade-item"><input type="checkbox" id="as-swivels"${s.swivels?' checked':''}> <span>Swivel Guns</span><span style="color:var(--text-muted);font-size:0.72rem;margin-left:6px">(+15 pts, boarding bonus)</span></label>
+    </div>
+    <div class="form-grid" style="margin-top:10px">
+      <div class="form-row"><label>Bow Chaser</label><select id="as-bow">
+        <option value=""${!s.bowChaser?' selected':''}>None</option>
+        ${['L','M','H','LC','C','HC'].map(v=>`<option value="${v}"${s.bowChaser===v?' selected':''}>${CHASER_LABELS[v]}</option>`).join('')}
+      </select></div>
+      <div class="form-row"><label>Stern Chaser</label><select id="as-stern">
+        <option value=""${!s.sternChaser?' selected':''}>None</option>
+        ${['L','M','H','LC','C','HC'].map(v=>`<option value="${v}"${s.sternChaser===v?' selected':''}>${CHASER_LABELS[v]}</option>`).join('')}
+      </select></div>
+    </div>
+
     <div class="form-grid">
       <div class="form-row"><label>Location</label><select id="sf-location">${ZONES.map(z=>`<option${s.location===z?' selected':''}>${z}</option>`).join('')}</select></div>
       <div class="form-row"><label>Squadron</label><input id="sf-squadron" value="${s.squadron||''}"></div>
@@ -1014,6 +1054,12 @@ function readShipForm(existing) {
     cost: parseInt(document.getElementById('sf-cost').value)||0,
     spCurrent: parseInt(document.getElementById('sf-spCurrent').value)||0,
     spMax: parseInt(document.getElementById('sf-spMax').value)||1,
+    decks: _asDecks.map(d=>({name:d.name,guns:d.guns,caliber:d.caliber,type:d.type})),
+    broadside: {..._asBroad},
+    fastSailer: document.getElementById('as-fastsailer')?.checked||false,
+    swivels: document.getElementById('as-swivels')?.checked||false,
+    bowChaser: document.getElementById('as-bow')?.value||'',
+    sternChaser: document.getElementById('as-stern')?.value||'',
     location: document.getElementById('sf-location').value,
     squadron: document.getElementById('sf-squadron').value.trim(),
     crewLevel: document.getElementById('sf-crew').value,
@@ -1033,6 +1079,10 @@ function readShipForm(existing) {
 window.openEditShip = function(id) {
   const s = (appData.ships || {})[id];
   if (!s) return;
+  // Load ship's saved armament/broadside into shared state
+  _asDecks = (s.decks||[]).map((d,i)=>({...d, id:i+1}));
+  _asDeckId = _asDecks.length + 1;
+  _asBroad = Object.assign({H:0,M:0,L:0,HC:0,C:0,LC:0}, s.broadside||{});
   showModal(`<button class="modal-close" onclick="closeModal()">×</button>
     <h2>Edit ${s.name}</h2>
     ${shipFormHtml(s)}
@@ -1041,202 +1091,202 @@ window.openEditShip = function(id) {
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
       <button class="btn" onclick="saveShip('${id}')">Save</button>
     </div>`);
+  _renderAsDecks(); _renderAsBroad();
 };
 
-// ─── SHIP BUILDER ─────────────────────────────────────────────────────────────
-const BUILDER_UPGRADES = [
-  { id:'sturdy',         name:'Sturdy',         cost:{XL:120,L:80,M:50,S:30,T:15}, excludes:[] },
-  { id:'over_gunned',    name:'Over Gunned',     cost:{XL:80,L:65,M:45,S:0,T:0},   excludes:['carronade_refit'], sizes:['XL','L','M'] },
-  { id:'master_gunner',  name:'Master Gunner',   cost:{XL:150,L:120,M:80,S:50,T:30},excludes:[] },
-  { id:'marines',        name:'Marines',         cost:{XL:60,L:45,M:30,S:20,T:10}, excludes:['privateer'] },
-  { id:'privateer',      name:'Privateer',       cost:{XL:0,L:40,M:30,S:20,T:10},  excludes:['marines'], sizes:['L','M','S','T'] },
-  { id:'carronade_refit',name:'Carronade Refit', cost:{XL:80,L:65,M:45,S:30,T:20}, excludes:['over_gunned'] },
-];
-const CALIBERS = [4,6,9,12,18,24,32,36,42];
-let _bldrDecks = [];
-let _bldrDeckId = 3;
-let _bldrPlayer = null, _bldrFaction = null, _bldrUpgrades = [];
+// ─── ADD SHIP (single-step) ───────────────────────────────────────────────────
+const CALIBERS    = [4,6,9,12,18,24,32,36,42];
+const BROAD_CATS  = ['H','M','L','HC','C','LC'];
+const BROAD_LABELS= {H:'Heavy LG',M:'Medium LG',L:'Light LG',HC:'H. Carronade',C:'Carronade',LC:'L. Carronade'};
+const BROAD_VALS  = {H:15,M:10,L:5,HC:20,C:15,LC:5};
 
-function _bSize(type) {
-  const t = type.toLowerCase();
-  if (t.includes('1st rate')||t.includes('2nd rate')) return 'XL';
-  if (t.includes('3rd rate')||t.includes('4th rate')||t.includes('heavy frigate')||t.includes('razee')||t.includes('east indiaman')||t.includes('manila galleon')) return 'L';
-  if (t.includes('5th rate')||t.includes('6th rate')||t.includes('frigate')||t.includes('merchantman')) return 'M';
-  if (t.includes('brig')||t.includes('sloop')||t.includes('corvette')||t.includes('schooner')||t.includes('xebec')||t.includes('polacre')||t.includes('privateer')||t.includes('letter of marque')||t.includes('packet')) return 'S';
-  return 'T';
-}
-function _bCat(caliber, type) {
+let _asDecks = [], _asDeckId = 1;
+let _asBroad = {H:0,M:0,L:0,HC:0,C:0,LC:0};
+let _asPlayerId = null, _asFaction = null;
+
+function _asCat(caliber, type) {
   if (type==='carronade') return caliber>=25?'HC':caliber>=13?'C':'LC';
   return caliber>=25?'H':caliber>=13?'M':'L';
 }
-function _bDice(guns) {
+function _asDice(guns) {
   if (guns<=0) return 0;
   if (guns<=9) return 1;
   const d = Math.round(Math.round(guns/2)/5);
   return (guns>=10&&d===0)?1:d;
 }
-function _isChaseDeck(n) { const l=n.toLowerCase(); return l.includes('bow')||l.includes('stern')||l.includes('chase'); }
-function _bBroadsides(decks) {
-  const cats={H:0,M:0,L:0,HC:0,C:0,LC:0};
-  const vals={H:15,M:10,L:5,HC:20,C:15,LC:5};
-  for (const d of decks) { if (_isChaseDeck(d.name)) continue; cats[_bCat(d.caliber,d.type)]+=d.guns; }
-  const parts=[];
-  for (const [c,g] of Object.entries(cats)) {
-    if (g>0) { const dice=_bDice(g); if(dice>0) parts.push({cat:c,dice,val:vals[c]}); }
-  }
-  parts.sort((a,b)=>b.val-a.val);
-  return parts;
-}
-function _bChasers(decks) {
-  const vals={H:15,M:10,L:5,HC:20,C:15,LC:5};
-  let total=0;
-  const sides=['bow','stern'];
-  for (const side of sides) {
-    let guns=0,cal=9,t='long';
-    for (const d of decks) { if(d.name.toLowerCase().includes(side)){guns+=d.guns;cal=d.caliber;t=d.type;} }
-    if(guns>0){ const dice=Math.max(1,Math.round(guns/2/5)); total+=dice*(vals[_bCat(cal,t)]||5); }
-  }
-  return total;
-}
 function _round5(n) { return Math.round(n/5)*5; }
 
-function builderCalc() {
-  const guns        = parseInt(document.getElementById('bldr-guns').value)||0;
-  const type        = document.getElementById('bldr-type').value||'';
-  const crew        = document.getElementById('bldr-crew').value;
-  const fastSailer  = document.getElementById('bldr-fastsailer').checked;
-  const swivels     = document.getElementById('bldr-swivels').checked;
-  const size        = _bSize(type);
-
-  const sp = Math.round(guns*1.25);
-  const parts = _bBroadsides(_bldrDecks);
-
-  // Base cost: SP*4 + broadsides + chasers
-  let base = sp*4;
-  for (const p of parts) base += p.dice*p.val;
-  base += _bChasers(_bldrDecks);
-
-  // Swivel guns flat cost
-  if (swivels) base += 15;
-
-  // Fast Sailer: +12% of base
-  if (fastSailer) base = Math.round(base * 1.12);
-
-  // Round to nearest 5
-  base = _round5(base);
-
-  // Crew modifier
-  const crewMod = {Inexperienced:-0.20,Regular:0,Veteran:0.20};
-  let cost = Math.round(base*(1+(crewMod[crew]||0)));
-
-  // Upgrades (added after crew modifier)
-  for (const uid of _bldrUpgrades) {
-    const u = BUILDER_UPGRADES.find(x=>x.id===uid);
-    if (u) cost += (u.cost[size]||0);
-  }
-
-  const broadStr = parts.length ? parts.map(p=>p.dice+p.cat).join('-') : '—';
-  document.getElementById('prev-sp').textContent    = sp;
-  document.getElementById('prev-broad').textContent = broadStr;
-  document.getElementById('prev-cost').textContent  = cost;
-  _renderUpgrades(size);
+function _asSuggestBroad() {
+  const cats={H:0,M:0,L:0,HC:0,C:0,LC:0};
+  for (const d of _asDecks) { const c=_asCat(d.caliber,d.type); cats[c]+=d.guns; }
+  for (const cat of BROAD_CATS) _asBroad[cat]=_asDice(cats[cat]);
+  _renderAsBroad();
 }
 
-function _renderDecks() {
-  document.getElementById('bldr-decks').innerHTML = _bldrDecks.map(d=>`
+function asCalc() {
+  const guns = parseInt(document.getElementById('as-guns')?.value)||0;
+  const crew = document.getElementById('as-crew')?.value||'Regular';
+  const fast = document.getElementById('as-fastsailer')?.checked||false;
+  const swiv = document.getElementById('as-swivels')?.checked||false;
+  const sp   = Math.round(guns*1.25);
+  let base   = sp*4;
+  for (const cat of BROAD_CATS) base += (_asBroad[cat]||0)*(BROAD_VALS[cat]||0);
+  if (swiv) base += 15;
+  if (fast) base = Math.round(base*1.12);
+  base = _round5(base);
+  const crewMod = {Inexperienced:-0.20,Regular:0,Veteran:0.20};
+  const cost = Math.round(base*(1+(crewMod[crew]||0)));
+  const spEl=document.getElementById('as-spCurrent'), spMEl=document.getElementById('as-spMax'), cEl=document.getElementById('as-cost');
+  if(spEl) spEl.value=sp; if(spMEl) spMEl.value=sp; if(cEl) cEl.value=cost;
+}
+
+function _renderAsDecks() {
+  if (!document.getElementById('as-decks')) return;
+  document.getElementById('as-decks').innerHTML = _asDecks.map(d=>`
     <div class="deck-row">
-      <input value="${d.name}" placeholder="Deck name" oninput="builderDeckUpdate(${d.id},'name',this.value)">
-      <input type="number" value="${d.guns}" min="0" max="60" oninput="builderDeckUpdate(${d.id},'guns',+this.value)" style="text-align:center">
-      <select onchange="builderDeckUpdate(${d.id},'caliber',+this.value)">${CALIBERS.map(c=>`<option value="${c}"${c===d.caliber?' selected':''}>${c}lb</option>`).join('')}</select>
-      <select onchange="builderDeckUpdate(${d.id},'type',this.value)">
+      <input value="${d.name}" placeholder="e.g. Gun Deck" oninput="asDeckUpdate(${d.id},'name',this.value)">
+      <input type="number" value="${d.guns}" min="0" max="60" oninput="asDeckUpdate(${d.id},'guns',+this.value)" style="text-align:center">
+      <select onchange="asDeckUpdate(${d.id},'caliber',+this.value)">${CALIBERS.map(c=>`<option value="${c}"${c===d.caliber?' selected':''}>${c}lb</option>`).join('')}</select>
+      <select onchange="asDeckUpdate(${d.id},'type',this.value)">
         <option value="long"${d.type==='long'?' selected':''}>Long Gun</option>
         <option value="carronade"${d.type==='carronade'?' selected':''}>Carronade</option>
       </select>
-      <button class="deck-remove" onclick="builderRemoveDeck(${d.id})" title="Remove">&#x2715;</button>
+      <button class="deck-remove" onclick="asRemoveDeck(${d.id})" title="Remove">&#x2715;</button>
     </div>`).join('');
 }
 
-function _renderUpgrades(size) {
-  document.getElementById('bldr-upgrades').innerHTML = BUILDER_UPGRADES.map(u => {
-    const allowed  = !u.sizes || u.sizes.includes(size);
-    const cost     = u.cost[size]||0;
-    const excluded = !_bldrUpgrades.includes(u.id) && u.excludes.some(id=>_bldrUpgrades.includes(id));
-    const checked  = _bldrUpgrades.includes(u.id);
-    const disabled = !allowed || excluded;
-    return `<label class="upgrade-item${disabled?' disabled':''}">
-      <input type="checkbox" ${checked?'checked':''} ${disabled?'disabled':''} onchange="builderToggleUpgrade('${u.id}',this.checked)">
-      <span>${u.name}</span><span style="color:var(--text-muted);font-size:0.72rem;margin-left:auto">+${cost}</span>
-    </label>`;
-  }).join('');
+function _renderAsBroad() {
+  const el = document.getElementById('as-broad-grid'); if(!el) return;
+  el.innerHTML = BROAD_CATS.map(cat=>`
+    <div style="display:flex;align-items:center;gap:6px;min-width:160px;margin-bottom:4px">
+      <span style="font-size:0.75rem;color:var(--text-muted);width:90px;flex-shrink:0">${BROAD_LABELS[cat]}</span>
+      <button class="btn btn-ghost btn-sm" style="padding:2px 10px;min-width:28px" onclick="asBroadAdj('${cat}',-1)">−</button>
+      <span id="as-broad-${cat}" style="min-width:22px;text-align:center;font-weight:600;color:var(--accent)">${_asBroad[cat]}</span>
+      <button class="btn btn-ghost btn-sm" style="padding:2px 10px;min-width:28px" onclick="asBroadAdj('${cat}',1)">+</button>
+    </div>`).join('');
 }
 
-window.builderDeckUpdate = function(id, field, val) {
-  const d = _bldrDecks.find(x=>x.id===id); if(d) d[field]=val; builderCalc();
+window.asDeckUpdate = function(id,field,val) {
+  const d=_asDecks.find(x=>x.id===id); if(d) d[field]=val; _asSuggestBroad(); asCalc();
 };
-window.builderRemoveDeck = function(id) {
-  if (_bldrDecks.length<=1) return;
-  _bldrDecks = _bldrDecks.filter(d=>d.id!==id);
-  _renderDecks(); builderCalc();
+window.asRemoveDeck = function(id) {
+  _asDecks=_asDecks.filter(d=>d.id!==id); _renderAsDecks(); _asSuggestBroad(); asCalc();
 };
-window.builderAddDeck = function() {
-  _bldrDecks.push({id:_bldrDeckId++,name:'',guns:10,caliber:9,type:'long'});
-  _renderDecks(); builderCalc();
+window.asAddDeck = function() {
+  _asDecks.push({id:_asDeckId++,name:'',guns:10,caliber:9,type:'long'}); _renderAsDecks(); _asSuggestBroad(); asCalc();
 };
-window.builderToggleUpgrade = function(id, on) {
-  if (on) _bldrUpgrades.push(id);
-  else _bldrUpgrades = _bldrUpgrades.filter(x=>x!==id);
-  builderCalc();
-};
-window.closeBuilder  = function() { document.getElementById('builder-overlay').style.display='none'; };
-window.builderOverlayClick = function(e) { if(e.target===document.getElementById('builder-overlay')) closeBuilder(); };
-
-function openBuilder(playerId, faction) {
-  _bldrPlayer = playerId; _bldrFaction = faction;
-  _bldrDecks = [{id:1,name:'Main Deck',guns:26,caliber:18,type:'long'},{id:2,name:'QD/FC',guns:10,caliber:9,type:'long'}];
-  _bldrDeckId = 3; _bldrUpgrades = [];
-  const sel = document.getElementById('bldr-type');
-  sel.innerHTML = SHIP_TYPES.map(t=>`<option>${t}</option>`).join('');
-  sel.value = '5th Rate Frigate';
-  document.getElementById('bldr-name').value = '';
-  document.getElementById('bldr-guns').value = 36;
-  document.getElementById('bldr-crew').value = 'Regular';
-  document.getElementById('bldr-fastsailer').checked = false;
-  document.getElementById('bldr-swivels').checked    = false;
-  _renderDecks(); builderCalc();
-  document.getElementById('builder-overlay').style.display = 'flex';
-}
-
-window.builderCreateShip = function() {
-  const sp    = parseInt(document.getElementById('prev-sp').textContent)||0;
-  const cost  = parseInt(document.getElementById('prev-cost').textContent)||0;
-  const name  = document.getElementById('bldr-name').value.trim();
-  const type  = document.getElementById('bldr-type').value;
-  const crew  = document.getElementById('bldr-crew').value;
-  const broad = document.getElementById('prev-broad').textContent;
-  const fast  = document.getElementById('bldr-fastsailer').checked;
-  const swiv  = document.getElementById('bldr-swivels').checked;
-  const upgStr = _bldrUpgrades.join(', ');
-  const noteParts = [`Broadsides: ${broad}`];
-  if (fast) noteParts.push('Fast Sailer');
-  if (swiv) noteParts.push('Swivel Guns');
-  if (upgStr) noteParts.push(upgStr);
-  closeBuilder();
-  const blank = { player:_bldrPlayer, faction:_bldrFaction, name, type, cost, spCurrent:sp, spMax:sp,
-    location:'', squadron:'', crewLevel:crew, status:'active', battlesWithoutStriking:0,
-    officer:'', repairPort:'', repairCostPaid:0, availableIn:'', notes:noteParts.join(' · ') };
-  showModal(`<button class="modal-close" onclick="closeModal()">&#x2715;</button>
-    <h2>Add New Ship</h2>
-    ${shipFormHtml(blank)}
-    <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-      <button class="btn" onclick="addShip('${_bldrPlayer}','${_bldrFaction}')">Add Ship</button>
-    </div>`);
+window.asBroadAdj = function(cat,delta) {
+  _asBroad[cat]=Math.max(0,(_asBroad[cat]||0)+delta);
+  const el=document.getElementById(`as-broad-${cat}`); if(el) el.textContent=_asBroad[cat];
+  asCalc();
 };
 
 window.openAddShip = function(playerId, faction) {
-  openBuilder(playerId, faction);
+  _asPlayerId=playerId; _asFaction=faction;
+  _asDecks=[{id:1,name:'Main Deck',guns:26,caliber:18,type:'long'},{id:2,name:'QD/FC',guns:10,caliber:9,type:'long'}];
+  _asDeckId=3; _asBroad={H:0,M:0,L:0,HC:0,C:0,LC:0};
+  const ownerPlayer=(appData.players||{})[playerId];
+  const ports=FACTION_PORTS[ownerPlayer?.faction||faction]||FACTION_PORTS.British;
+  const repairPortOpts=['', ...ports].map(p=>`<option value="${p}">${p||'(none)'}</option>`).join('');
+  const officerNames=ownerPlayer?.officerName?[ownerPlayer.officerName]:[];
+  const officerOpts=['', ...officerNames].map(o=>`<option value="${o}">${o||'(none)'}</option>`).join('');
+  showModal(`
+    <button class="modal-close" onclick="closeModal()">&#x2715;</button>
+    <h2>Add New Ship</h2>
+
+    <div class="form-row"><label>Ship Name</label><input id="as-name" placeholder="e.g. HMS Badger"></div>
+    <div class="form-grid">
+      <div class="form-row"><label>Type</label><select id="as-type" onchange="asCalc()">${['',...SHIP_TYPES].map(t=>`<option value="${t}">${t||'— select type —'}</option>`).join('')}</select></div>
+      <div class="form-row"><label>Crew Level</label><select id="as-crew" onchange="asCalc()">${CREW_LEVELS.map(c=>`<option${c==='Regular'?' selected':''}>${c}</option>`).join('')}</select></div>
+    </div>
+    <div class="form-grid">
+      <div class="form-row"><label>Total Guns</label><input type="number" id="as-guns" value="36" min="0" max="120" oninput="asCalc()"></div>
+      <div class="form-row"><label>Cost (resources)</label><input type="number" id="as-cost" value="0"></div>
+    </div>
+    <div class="form-grid">
+      <div class="form-row"><label>SP Current</label><input type="number" id="as-spCurrent" value="0" min="0"></div>
+      <div class="form-row"><label>SP Max</label><input type="number" id="as-spMax" value="0" min="1"></div>
+    </div>
+
+    <div class="section-label" style="margin-top:14px">Armament</div>
+    <div class="deck-header"><label>Deck Name</label><label>Guns</label><label>Caliber</label><label>Type</label><label></label></div>
+    <div id="as-decks"></div>
+    <button class="btn btn-ghost btn-sm" onclick="asAddDeck()" style="margin-top:4px">+ Add Gun Deck</button>
+
+    <div class="section-label" style="margin-top:14px">Broadside Dice <span style="font-size:0.72rem;color:var(--text-muted);font-weight:400">(auto-suggested from armament — adjust as needed)</span></div>
+    <div id="as-broad-grid" style="display:flex;flex-wrap:wrap;gap:4px 24px;margin-top:8px"></div>
+
+    <div class="section-label" style="margin-top:14px">Options</div>
+    <div style="display:flex;gap:20px;flex-wrap:wrap">
+      <label class="upgrade-item"><input type="checkbox" id="as-fastsailer" onchange="asCalc()"> <span>Fast Sailer</span><span style="color:var(--text-muted);font-size:0.72rem;margin-left:6px">(+1 knot, +12% cost)</span></label>
+      <label class="upgrade-item"><input type="checkbox" id="as-swivels" onchange="asCalc()"> <span>Swivel Guns</span><span style="color:var(--text-muted);font-size:0.72rem;margin-left:6px">(+15 pts, boarding bonus)</span></label>
+    </div>
+    <div class="form-grid" style="margin-top:10px">
+      <div class="form-row"><label>Bow Chaser</label><select id="as-bow">
+        <option value="">None</option>
+        <option value="L">Lt. Long Gun</option><option value="M">Med. Long Gun</option><option value="H">Hvy. Long Gun</option>
+        <option value="LC">Lt. Carronade</option><option value="C">Carronade</option><option value="HC">Hvy. Carronade</option>
+      </select></div>
+      <div class="form-row"><label>Stern Chaser</label><select id="as-stern">
+        <option value="">None</option>
+        <option value="L">Lt. Long Gun</option><option value="M">Med. Long Gun</option><option value="H">Hvy. Long Gun</option>
+        <option value="LC">Lt. Carronade</option><option value="C">Carronade</option><option value="HC">Hvy. Carronade</option>
+      </select></div>
+    </div>
+
+    <div class="section-label" style="margin-top:14px">Campaign Details</div>
+    <div class="form-grid">
+      <div class="form-row"><label>Location</label><select id="as-location">${ZONES.map(z=>`<option>${z}</option>`).join('')}</select></div>
+      <div class="form-row"><label>Squadron</label><input id="as-squadron" value=""></div>
+    </div>
+    <div class="form-row"><label>Status</label><select id="as-status">${STATUSES.map(st=>`<option${st==='active'?' selected':''}>${st}</option>`).join('')}</select></div>
+    <div class="form-row"><label>Officer Assigned</label><select id="as-officer">${officerOpts}</select></div>
+    <div class="form-grid">
+      <div class="form-row"><label>Repair Port</label><select id="as-repairPort">${repairPortOpts}</select></div>
+      <div class="form-row"><label>Repair Cost Paid</label><input type="number" id="as-repairCost" value="0"></div>
+    </div>
+    <div class="form-row"><label>Available in Turn</label><input id="as-available" value=""></div>
+    <div class="form-row"><label>Notes</label><textarea id="as-notes" rows="2"></textarea></div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn" onclick="saveNewShip()">Add Ship</button>
+    </div>`);
+  _renderAsDecks(); _asSuggestBroad(); asCalc();
 };
 
+window.saveNewShip = async function() {
+  const name=document.getElementById('as-name').value.trim();
+  if (!name) { showToast('Ship needs a name'); return; }
+  const broadStr=BROAD_CATS.filter(c=>_asBroad[c]>0).map(c=>_asBroad[c]+c).join('-')||'—';
+  const data={
+    player:_asPlayerId, faction:_asFaction, name,
+    type:document.getElementById('as-type').value,
+    crewLevel:document.getElementById('as-crew').value,
+    cost:parseInt(document.getElementById('as-cost').value)||0,
+    spCurrent:parseInt(document.getElementById('as-spCurrent').value)||0,
+    spMax:parseInt(document.getElementById('as-spMax').value)||1,
+    decks:_asDecks.map(d=>({name:d.name,guns:d.guns,caliber:d.caliber,type:d.type})),
+    broadside:{..._asBroad},
+    fastSailer:document.getElementById('as-fastsailer').checked,
+    swivels:document.getElementById('as-swivels').checked,
+    bowChaser:document.getElementById('as-bow')?.value||'',
+    sternChaser:document.getElementById('as-stern')?.value||'',
+    location:document.getElementById('as-location').value,
+    squadron:document.getElementById('as-squadron').value.trim(),
+    status:document.getElementById('as-status').value,
+    battlesWithoutStriking:0,
+    officer:document.getElementById('as-officer').value,
+    repairPort:document.getElementById('as-repairPort').value,
+    repairCostPaid:parseInt(document.getElementById('as-repairCost').value)||0,
+    availableIn:document.getElementById('as-available').value.trim(),
+    sunkBy:'', capturedBy:'',
+    notes:document.getElementById('as-notes').value.trim(),
+  };
+  const newRef=push(ref(db,'/ships'));
+  await set(newRef,data);
+  closeModal(); showToast(`${data.name} added`);
+};
 
 window.saveShip = async function(id) {
   const existing = (appData.ships || {})[id];
@@ -1253,14 +1303,6 @@ window.saveShip = async function(id) {
   closeModal(); showToast(data.player !== existing.player ? 'Ship transferred — pending prize decision' : 'Ship updated');
 };
 
-window.addShip = async function(playerId, faction) {
-  const blank = { player: playerId, faction, name:'', type:'', cost:0, spCurrent:13, spMax:13, location:'Zone 1', squadron:'', crewLevel:'Inexperienced', status:'active', battlesWithoutStriking:0, officer:'', repairPort:'', repairCostPaid:0, availableIn:'', notes:'' };
-  const data = readShipForm(blank);
-  if (!data.name) { showToast('Ship needs a name'); return; }
-  const newRef = push(ref(db, '/ships'));
-  await set(newRef, data);
-  closeModal(); showToast(`${data.name} added`);
-};
 
 window.deleteShip = async function(id) {
   const s = (appData.ships || {})[id];
