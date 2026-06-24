@@ -156,6 +156,14 @@
 
   .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--surface2); border: 1px solid var(--accent); color: var(--text); padding: 10px 20px; border-radius: var(--radius); z-index: 500; font-size: 0.88rem; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
   .toast.show { opacity: 1; }
+
+  /* Ship builder overlay */
+  .builder-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 300; display: flex; flex-direction: column; }
+  .builder-header { background: var(--surface); border-bottom: 2px solid var(--accent); padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+  .builder-header h2 { color: var(--accent); font-size: 1rem; }
+  .builder-header .builder-actions { display: flex; gap: 8px; align-items: center; }
+  .builder-header p { color: var(--text-muted); font-size: 0.8rem; margin-top: 2px; }
+  .builder-iframe { flex: 1; border: none; width: 100%; background: #fff; }
 </style>
 </head>
 <body>
@@ -206,6 +214,21 @@
   <div class="modal" id="modal-content"></div>
 </div>
 
+<!-- Ship Builder Overlay -->
+<div id="builder-overlay" class="builder-overlay" style="display:none">
+  <div class="builder-header">
+    <div>
+      <h2>&#x2693; Ship Builder</h2>
+      <p>Design your ship, then click Continue to add it to the campaign.</p>
+    </div>
+    <div class="builder-actions">
+      <button class="btn btn-ghost btn-sm" id="builder-skip-btn">Skip Builder</button>
+      <button class="btn btn-sm" id="builder-continue-btn">Continue to Ship Details &rarr;</button>
+    </div>
+  </div>
+  <iframe class="builder-iframe" src="https://linusnapoleonicshipyard.github.io/shipwright-s-armory/" title="Ship Builder"></iframe>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <!-- Fallback: if Firebase module fails to load, show setup screen -->
@@ -247,6 +270,7 @@ import { getDatabase, ref, set, get, update, remove, onValue, push } from "https
 // ─── STATE ───────────────────────────────────────────────────────────────────
 let db, appData = {}, currentTab = 'overview', activeFilter = 'all';
 
+const SHIP_TYPES = ['1st Rate','2nd Rate','3rd Rate','4th Rate','Razee','Heavy Frigate','5th Rate Frigate','6th Rate','Ship-Sloop','Brig-Sloop','Gun Brig','Corvette','Cutter','Schooner','Gunboat','Bomb Vessel','Xebec','Large Xebec','Polacre','Galley','Galiot','Tartane','Felucca','Merchantman','East Indiaman','Manila Galleon','Packet Ship','Privateer','Privateer Schooner','Privateer Brig','Privateer Cutter','Letter of Marque'];
 const FACTIONS = ['British','French','Spanish'];
 const FACTION_COLOR = { British:'var(--british)', French:'var(--french)', Spanish:'var(--spanish)', Merchant:'var(--merchant)' };
 const FACTION_FLAG = { British:'🇬🇧', French:'🇫🇷', Spanish:'🇪🇸', Merchant:'🚢' };
@@ -836,7 +860,7 @@ function shipFormHtml(s) {
   return `
     <div class="form-row"><label>Ship Name</label><input id="sf-name" value="${s.name||''}"></div>
     <div class="form-grid">
-      <div class="form-row"><label>Type</label><input id="sf-type" value="${s.type||''}"></div>
+      <div class="form-row"><label>Type</label><select id="sf-type">${['', ...SHIP_TYPES].map(t=>`<option value="${t}"${s.type===t?' selected':''}>${t||'— select type —'}</option>`).join('')}</select></div>
       <div class="form-row"><label>Cost (resources)</label><input type="number" id="sf-cost" value="${s.cost||0}"></div>
     </div>
     <div class="form-grid">
@@ -924,16 +948,31 @@ window.openEditShip = function(id) {
 };
 
 window.openAddShip = function(playerId, faction) {
+  document.getElementById('builder-overlay').style.display = 'flex';
+  document.getElementById('builder-continue-btn').onclick = function() {
+    document.getElementById('builder-overlay').style.display = 'none';
+    openAddShipForm(playerId, faction);
+  };
+  document.getElementById('builder-skip-btn').onclick = function() {
+    document.getElementById('builder-overlay').style.display = 'none';
+    openAddShipForm(playerId, faction);
+  };
+};
+
+window.openAddShipForm = function(playerId, faction) {
   const blank = { player: playerId, faction, name:'', type:'', cost:0, spCurrent:13, spMax:13, location:'Zone 1', squadron:'', crewLevel:'Inexperienced', status:'active', battlesWithoutStriking:0, officer:'', repairPort:'', repairCostPaid:0, availableIn:'', notes:'' };
-  showModal(`<button class="modal-close" onclick="closeModal()">×</button>
+  showModal(`<button class="modal-close" onclick="closeModal()">&#x2715;</button>
     <h2>Add New Ship</h2>
+    <div style="margin-bottom:12px;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);font-size:0.8rem;color:var(--text-muted);">
+      Use the stats from the Ship Builder to fill in cost and SP below.
+      <button class="btn btn-ghost btn-sm" style="margin-left:8px" onclick="document.getElementById('builder-overlay').style.display='flex'">&#x2693; Re-open Builder</button>
+    </div>
     ${shipFormHtml(blank)}
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
       <button class="btn" onclick="addShip('${playerId}','${faction}')">Add Ship</button>
     </div>`);
 };
-
 window.saveShip = async function(id) {
   const existing = (appData.ships || {})[id];
   const data = readShipForm(existing);
