@@ -490,7 +490,8 @@ function rebuildNav() {
     <button class="${currentTab==='overview'?'active':''}" onclick="showTab('overview')">Overview</button>
     ${playerBtns}
     <button class="${currentTab==='merchant'?'active':''}" onclick="showTab('merchant')">Convoy</button>
-    <button class="${currentTab==='log'?'active':''}" onclick="showTab('log')">Dispatches</button>`;
+    <button class="${currentTab==='log'?'active':''}" onclick="showTab('log')">Dispatches</button>
+    <button class="${currentTab==='map'?'active':''}" onclick="showTab('map')">Map</button>`;
 }
 
 // ─── OVERVIEW ─────────────────────────────────────────────────────────────────
@@ -877,6 +878,34 @@ window.toggleLetter = function(id) {
 };
 
 // ─── MAP ──────────────────────────────────────────────────────────────────────
+// Port anchor positions as % of map image (663×853)
+const MAP_PORT_POS = {
+  'Cork':        { x:53.2, y: 3.5 },
+  'Plymouth':    { x:69.1, y:14.4 },
+  'Brest':       { x:65.2, y:23.1 },
+  'Lorient':     { x:69.2, y:32.4 },
+  'La Rochelle': { x:73.9, y:39.5 },
+  'Rochefort':   { x:77.5, y:42.1 },
+  'Bayonne':     { x:73.5, y:53.1 },
+  'Santander':   { x:55.7, y:54.2 },
+  'Ferrol':      { x:37.1, y:48.1 },
+  'Coruña':      { x:31.2, y:48.7 },
+  'Vigo':        { x:32.4, y:53.6 },
+  'Lisbon':      { x:22.9, y:72.9 },
+  'Cádiz':       { x:32.4, y:88.2 },
+  'Gibraltar':   { x:39.8, y:91.3 },
+};
+// Zone sea-area spread slots (up to 8 ships per zone without overlap)
+const MAP_ZONE_SLOTS = {
+  'Zone 1': [{x:40,y:7},{x:50,y:5},{x:58,y:10},{x:44,y:16},{x:33,y:12},{x:55,y:18},{x:38,y:22},{x:62,y:16}],
+  'Zone 2': [{x:56,y:28},{x:63,y:34},{x:53,y:36},{x:60,y:42},{x:50,y:43},{x:67,y:40},{x:58,y:46},{x:47,y:38}],
+  'Zone 3': [{x:56,y:50},{x:63,y:55},{x:52,y:57},{x:68,y:60},{x:48,y:60},{x:60,y:62},{x:54,y:64},{x:44,y:55}],
+  'Zone 4': [{x:20,y:51},{x:13,y:55},{x:26,y:58},{x:17,y:62},{x:10,y:58},{x:28,y:64},{x:22,y:66},{x:8,y:64}],
+  'Zone 5': [{x:11,y:68},{x:6,y:74},{x:15,y:77},{x:8,y:82},{x:17,y:82},{x:4,y:80},{x:12,y:86},{x:20,y:78}],
+  'Zone 6': [{x:16,y:84},{x:8,y:87},{x:22,y:88},{x:12,y:92},{x:20,y:93},{x:5,y:91},{x:28,y:91},{x:25,y:85}],
+  'Zone 7': [{x:30,y:93},{x:38,y:93},{x:24,y:95},{x:44,y:95},{x:32,y:97},{x:20,y:93},{x:46,y:91},{x:36,y:97}],
+};
+
 const MAP_PORTS = [
   { name:'Cork',        x:353, y:30,  fac:'British', zone:1, major:false },
   { name:'Plymouth',    x:458, y:123, fac:'British', zone:1, major:true  },
@@ -896,132 +925,88 @@ const MAP_PORTS = [
 
 function renderMap() {
   const ships = appData.ships || {};
-  const portShips = {};
-  Object.entries(ships).forEach(([id,s]) => {
-    if (s.location) { portShips[s.location] = portShips[s.location] || []; portShips[s.location].push({id,...s}); }
-  });
-
+  const players = appData.players || {};
   const FC = { British:'#c73535', French:'#2255a8', Spanish:'#8822a0' };
 
-  const markers = MAP_PORTS.map(p => {
-    const list = portShips[p.name] || [];
-    const n = list.length;
-    const col = FC[p.fac] || '#555';
-    const labelDy = n > 0 ? 26 : (p.major ? 15 : 13);
+  // Group ships by location
+  const byLocation = {};
+  Object.entries(ships).forEach(([id,s]) => {
+    if (!s.location) return;
+    byLocation[s.location] = byLocation[s.location] || [];
+    byLocation[s.location].push({id,...s});
+  });
 
-    // faction breakdown rings for multi-player ports
-    let rings = '';
-    if (n > 1) {
-      const byFac = {};
-      list.forEach(s => { byFac[s.faction] = (byFac[s.faction]||0)+1; });
-      const facs = Object.keys(byFac);
-      if (facs.length > 1) {
-        rings = facs.map((f,i) => `<circle cx="${p.x}" cy="${p.y}" r="${14+i*4}" fill="none" stroke="${FC[f]||'#888'}" stroke-width="2" opacity="0.6"/>`).join('');
-      }
-    }
+  const bubbles = [];
 
-    const dot = n > 0
-      ? `<circle cx="${p.x}" cy="${p.y}" r="13" fill="${col}" stroke="white" stroke-width="1.5" opacity="0.92" onclick="mapPortClick('${p.name}')" style="cursor:pointer"/>
-         <text x="${p.x}" y="${p.y+5}" text-anchor="middle" font-size="12" font-weight="bold" fill="white" pointer-events="none">${n}</text>`
-      : `<circle cx="${p.x}" cy="${p.y}" r="${p.major?6:4}" fill="${col}" stroke="white" stroke-width="1" opacity="0.55"/>`;
+  // Ships at a named port — stack in a tight cluster offset from port anchor
+  Object.entries(MAP_PORT_POS).forEach(([portName, pos]) => {
+    const list = byLocation[portName] || [];
+    list.forEach((ship, i) => {
+      const col = (i % 3) - 1;   // -1, 0, +1 columns
+      const row = Math.floor(i / 3);
+      bubbles.push({
+        x: pos.x + col * 5,
+        y: pos.y + 4 + row * 5,  // push down slightly below anchor icon
+        ship, loc: portName, atPort: true,
+      });
+    });
+  });
 
-    return `<g>
-      ${rings}${dot}
-      <text x="${p.x}" y="${p.y+labelDy}" text-anchor="middle" font-size="8.5" fill="${col}" font-weight="${p.major?'700':'500'}" opacity="${n>0?'1':'0.7'}">${p.name}</text>
-    </g>`;
+  // Ships at sea in a zone — spread across pre-defined zone slots
+  const zoneCounters = {};
+  Object.entries(byLocation).forEach(([loc, list]) => {
+    const slots = MAP_ZONE_SLOTS[loc];
+    if (!slots) return;
+    list.forEach(ship => {
+      const idx = zoneCounters[loc] = (zoneCounters[loc] || 0);
+      zoneCounters[loc]++;
+      const pos = slots[idx % slots.length];
+      bubbles.push({ x: pos.x, y: pos.y, ship, loc, atPort: false });
+    });
+  });
+
+  const bubbleHtml = bubbles.map(b => {
+    const col = FC[b.ship.faction] || '#555';
+    const p = players[b.ship.player] || {};
+    const label = b.ship.name.length > 12 ? b.ship.name.slice(0,11) + '…' : b.ship.name;
+    const statusIcon = b.ship.status === 'repairing' ? ' ⚓' : b.ship.status === 'sunk' ? ' †' : b.ship.status === 'captured' ? ' ⛓' : '';
+    const border = b.atPort ? '2px solid rgba(255,255,255,0.6)' : '2px solid white';
+    const shadow = b.atPort ? '0 1px 3px rgba(0,0,0,0.35)' : '0 1px 5px rgba(0,0,0,0.5)';
+    const title = `${b.ship.name} · ${b.ship.type||''} · ${p.name||''} · ${b.loc}`;
+    return `<div onclick="mapBubbleClick('${b.ship.id}')" title="${title.replace(/'/g,'&#39;')}"
+      style="position:absolute;left:${b.x}%;top:${b.y}%;transform:translate(-50%,-50%);
+             background:${col};color:white;border:${border};border-radius:16px;
+             padding:2px 7px;font-size:0.62rem;font-weight:700;cursor:pointer;
+             white-space:nowrap;box-shadow:${shadow};z-index:10;line-height:1.5;
+             opacity:${b.atPort?0.82:1}">${label}${statusIcon}</div>`;
   }).join('');
 
-  return `<div style="overflow-x:auto;padding:8px 0">
-  <svg viewBox="0 0 660 820" xmlns="http://www.w3.org/2000/svg"
-       style="width:100%;max-width:660px;display:block;margin:0 auto;border:1px solid var(--border);border-radius:var(--radius)">
-    <defs>
-      <pattern id="mapgrid" width="44" height="44" patternUnits="userSpaceOnUse">
-        <path d="M44,0 L0,0 L0,44" fill="none" stroke="#5a88a8" stroke-width="0.4" opacity="0.4"/>
-      </pattern>
-    </defs>
-
-    <!-- SEA -->
-    <rect width="660" height="820" fill="#7aa8c0"/>
-    <rect width="660" height="820" fill="url(#mapgrid)"/>
-
-    <!-- IRELAND (south coast visible) -->
-    <path d="M 250,0 L 392,0 L 400,54 L 376,80 L 336,97 L 292,94 L 256,70 Z"
-          fill="#c9b87a" stroke="#8a7840" stroke-width="1.2"/>
-
-    <!-- SW ENGLAND -->
-    <path d="M 390,0 L 660,0 L 660,162 L 598,147 L 554,133 L 514,120
-             L 492,118 L 474,126 L 462,130 L 448,120 L 428,106 L 406,84 L 396,52 Z"
-          fill="#c9b87a" stroke="#8a7840" stroke-width="1.2"/>
-
-    <!-- FRANCE (Atlantic strip + Brittany peninsula) -->
-    <path d="M 502,162 L 660,162 L 660,432 L 534,418 L 492,452
-             L 498,428 L 505,404 L 516,385 L 518,362
-             L 527,347 L 514,331 L 496,328
-             L 500,308 L 507,282 L 500,260
-             L 490,254 L 464,266 L 452,260
-             L 441,242 L 434,218 L 432,197
-             L 438,184 L 450,172 L 462,162 L 478,151 L 502,142 Z"
-          fill="#c9b87a" stroke="#8a7840" stroke-width="1.2"/>
-
-    <!-- IBERIAN PENINSULA -->
-    <path d="M 534,418 L 660,432 L 660,820 L 265,820
-             L 265,780
-             L 215,752 L 160,754 L 114,724 L 98,684
-             L 134,662 L 150,622
-             L 156,576 L 172,538 L 178,504
-             L 164,482 L 166,448 L 183,428
-             L 208,416 L 246,412 L 262,424
-             L 290,455 L 334,468 L 370,464
-             L 492,452 L 534,418 Z"
-          fill="#c9b87a" stroke="#8a7840" stroke-width="1.2"/>
-
-    <!-- NW AFRICA sliver -->
-    <path d="M 0,820 L 660,820 L 660,808 L 500,804 L 360,806 L 220,812 L 80,818 L 0,820 Z"
-          fill="#c9b87a" stroke="#8a7840" stroke-width="0.8"/>
-
-    <!-- Zone labels -->
-    <text x="300" y="155" text-anchor="middle" font-size="9" fill="white" opacity="0.55" font-style="italic" letter-spacing="1">WESTERN APPROACHES</text>
-    <text x="390" y="230" text-anchor="middle" font-size="9" fill="white" opacity="0.55" font-style="italic" letter-spacing="1">N. BAY OF BISCAY</text>
-    <text x="360" y="360" text-anchor="middle" font-size="9" fill="white" opacity="0.55" font-style="italic" letter-spacing="1">S. BAY OF BISCAY</text>
-    <text x="108" y="558" text-anchor="middle" font-size="9" fill="white" opacity="0.55" font-style="italic" letter-spacing="1">PORTUGUESE</text>
-    <text x="108" y="570" text-anchor="middle" font-size="9" fill="white" opacity="0.55" font-style="italic" letter-spacing="1">COAST</text>
-    <text x="148" y="720" text-anchor="middle" font-size="9" fill="white" opacity="0.55" font-style="italic" letter-spacing="1">CÁDIZ</text>
-    <text x="148" y="732" text-anchor="middle" font-size="9" fill="white" opacity="0.55" font-style="italic" letter-spacing="1">APPROACHES</text>
-    <text x="200" y="800" text-anchor="middle" font-size="9" fill="white" opacity="0.55" font-style="italic" letter-spacing="1">GIBRALTAR &amp; STRAITS</text>
-
-    <!-- Port markers -->
-    ${markers}
-  </svg></div>`;
+  return `<div style="position:relative;max-width:663px;margin:0 auto;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:#7aa8c0">
+    <img src="map.jpg" style="width:100%;display:block;vertical-align:bottom"
+         onerror="this.style.opacity='0.15'">
+    ${bubbleHtml}
+    <div style="position:absolute;bottom:6px;right:8px;display:flex;gap:6px;opacity:0.85">
+      ${Object.entries(FC).map(([f,c])=>`<span style="background:${c};color:white;font-size:0.6rem;font-weight:700;padding:2px 6px;border-radius:10px;border:1px solid white">${f}</span>`).join('')}
+    </div>
+  </div>`;
 }
 
-window.mapPortClick = function(portName) {
-  const ships = appData.ships || {};
-  const players = appData.players || {};
-  const portList = Object.entries(ships).filter(([,s]) => s.location === portName);
-  if (!portList.length) { showToast(`No ships at ${portName}`); return; }
-
-  const rows = portList.map(([id,s]) => {
-    const p = players[s.player] || {};
-    const factionFlag = FACTION_FLAG[s.faction] || '';
-    const statusBadge = s.status && s.status !== 'active'
-      ? `<span style="font-size:0.75rem;opacity:0.7"> (${s.status})</span>` : '';
-    return `<tr>
-      <td style="padding:5px 8px">${factionFlag} ${s.name}${statusBadge}</td>
-      <td style="padding:5px 8px;opacity:0.75">${s.type||''}</td>
-      <td style="padding:5px 8px;opacity:0.75">${p.name||s.player||''}</td>
-    </tr>`;
-  }).join('');
-
+window.mapBubbleClick = function(shipId) {
+  const ship = (appData.ships || {})[shipId];
+  if (!ship) return;
+  const p = (appData.players || {})[ship.player] || {};
+  const flag = FACTION_FLAG[ship.faction] || '';
   showModal(`<button class="modal-close" onclick="closeModal()">×</button>
-    <h2>⚓ ${portName}</h2>
-    <table style="width:100%;border-collapse:collapse;font-size:0.88rem">
-      <thead><tr style="border-bottom:1px solid var(--border)">
-        <th style="text-align:left;padding:4px 8px">Ship</th>
-        <th style="text-align:left;padding:4px 8px">Type</th>
-        <th style="text-align:left;padding:4px 8px">Player</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>`);
+    <h2>${flag} ${ship.name}</h2>
+    <div class="stat-row"><span class="stat-label">Type</span><span class="stat-value">${ship.type||'—'}</span></div>
+    <div class="stat-row"><span class="stat-label">Player</span><span class="stat-value">${p.name||ship.player||'—'}</span></div>
+    <div class="stat-row"><span class="stat-label">Location</span><span class="stat-value">${ship.location||'—'}</span></div>
+    <div class="stat-row"><span class="stat-label">Status</span><span class="stat-value">${ship.status||'active'}</span></div>
+    <div class="stat-row"><span class="stat-label">SP</span><span class="stat-value">${ship.spCurrent||0} / ${ship.spMax||0}</span></div>
+    <div style="margin-top:14px;display:flex;justify-content:flex-end;gap:8px">
+      <button class="btn btn-ghost" onclick="closeModal()">Close</button>
+      <button class="btn" onclick="closeModal();showTab('${ship.player||'overview'}')">Go to Player</button>
+    </div>`);
 };
 
 // ─── LOG ──────────────────────────────────────────────────────────────────────
@@ -1156,9 +1141,22 @@ window.showPlayerModal = function(pid) {
       <input type="hidden" id="pm-favour" value="${p.admiraltyFavour}">
     </div>
     <div class="modal-actions">
+      <button class="btn btn-danger" onclick="deletePlayer('${pid}')" style="margin-right:auto">Delete Player</button>
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
       <button class="btn" onclick="savePlayer('${pid}')">Save</button>
     </div>`);
+};
+
+window.deletePlayer = async function(pid) {
+  const p = (appData.players || {})[pid];
+  if (!p) return;
+  const shipCount = Object.values(appData.ships || {}).filter(s => s.player === pid).length;
+  const warn = shipCount > 0 ? `\n\nWarning: this player has ${shipCount} ship(s) which will become unowned.` : '';
+  if (!confirm(`Delete ${p.name}?${warn}\n\nThis cannot be undone.`)) return;
+  await remove(cref(`/players/${pid}`));
+  if (currentTab === pid) currentTab = 'overview';
+  closeModal();
+  showToast(`${p.name} removed`);
 };
 
 window.adjRes = function(id, amt) {
