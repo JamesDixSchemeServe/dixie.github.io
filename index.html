@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Black Seas – Biscay & Iberian Station</title>
+<style>
+  :root {
+    --bg: #0d1b2a;
+    --surface: #162032;
+    --surface2: #1e2e42;
+    --border: #2a3f57;
+    --accent: #c8973a;
+    --accent2: #4a9eda;
+    --text: #dde6f0;
+    --text-muted: #7a98b5;
+    --red: #d94f4f;
+    --green: #4caf7d;
+    --british: #c8973a;
+    --french: #5b8dd9;
+    --spanish: #d94f4f;
+    --merchant: #7a98b5;
+    --radius: 8px;
+    --font: 'Georgia', serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; }
+
+  /* Header */
+  header { background: var(--surface); border-bottom: 2px solid var(--accent); padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+  header h1 { font-size: 1.1rem; color: var(--accent); letter-spacing: 1px; }
+  .turn-badge { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 4px 10px; font-size: 0.8rem; color: var(--text-muted); cursor: pointer; }
+  .turn-badge span { color: var(--accent); font-weight: bold; }
+
+  /* Nav tabs */
+  nav { display: flex; background: var(--surface); border-bottom: 1px solid var(--border); overflow-x: auto; gap: 2px; padding: 0 8px; }
+  nav button { background: none; border: none; color: var(--text-muted); padding: 10px 14px; font-family: var(--font); font-size: 0.85rem; cursor: pointer; white-space: nowrap; border-bottom: 3px solid transparent; transition: all 0.2s; }
+  nav button.active { color: var(--accent); border-bottom-color: var(--accent); }
+  nav button:hover:not(.active) { color: var(--text); }
+
+  /* Main content */
+  main { padding: 16px; max-width: 900px; margin: 0 auto; }
+
+  /* Cards */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
+  .card-title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 8px; }
+
+  /* Player summary row */
+  .player-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+  @media(min-width:600px){ .player-row { grid-template-columns: repeat(4,1fr); } }
+  .player-card { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; cursor: pointer; transition: border-color 0.2s; }
+  .player-card:hover { border-color: var(--accent); }
+  .player-card .faction-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+  .player-card h3 { font-size: 0.9rem; margin-bottom: 4px; }
+  .player-card .res { font-size: 1.1rem; color: var(--accent); font-weight: bold; }
+  .player-card .favour { font-size: 0.75rem; margin-top: 4px; }
+  .favour-val { font-weight: bold; }
+  .fav-pos { color: var(--green); }
+  .fav-neg { color: var(--red); }
+  .fav-zero { color: var(--text-muted); }
+
+  /* Ships table */
+  .ships-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .btn { background: var(--accent); color: #0d1b2a; border: none; border-radius: var(--radius); padding: 7px 14px; font-family: var(--font); font-size: 0.85rem; cursor: pointer; font-weight: bold; transition: opacity 0.2s; }
+  .btn:hover { opacity: 0.85; }
+  .btn-sm { padding: 4px 10px; font-size: 0.78rem; }
+  .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text-muted); }
+  .btn-ghost:hover { border-color: var(--accent2); color: var(--accent2); }
+  .btn-danger { background: var(--red); color: white; }
+
+  .ship-list { display: flex; flex-direction: column; gap: 8px; }
+  .ship-card { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; }
+  .ship-card.repairing { border-left: 3px solid var(--accent2); }
+  .ship-card.lost { border-left: 3px solid var(--red); opacity: 0.65; }
+  .ship-card.merchant-card { border-left: 3px solid var(--merchant); }
+  .ship-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .ship-name { font-size: 1rem; color: var(--text); }
+  .ship-type { font-size: 0.78rem; color: var(--text-muted); margin-top: 2px; }
+  .ship-actions { display: flex; gap: 4px; flex-shrink: 0; }
+  .ship-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .tag { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px; font-size: 0.75rem; color: var(--text-muted); }
+  .tag.sp { color: var(--text); }
+  .tag.sp.damaged { color: #e8a44a; }
+  .tag.sp.critical { color: var(--red); }
+  .tag.crew-vet { color: var(--green); }
+  .tag.crew-reg { color: var(--accent2); }
+  .tag.crew-inex { color: var(--text-muted); }
+  .ship-notes { font-size: 0.78rem; color: var(--text-muted); margin-top: 6px; font-style: italic; }
+  .squadron-label { font-size: 0.75rem; font-weight: bold; color: var(--accent); margin-top: 2px; }
+
+  /* Section headers */
+  .section-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); margin: 16px 0 8px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+
+  /* SP bar */
+  .sp-bar-wrap { margin-top: 6px; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .sp-bar { height: 100%; border-radius: 2px; transition: width 0.3s; }
+
+  /* Modal */
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200; display: flex; align-items: flex-end; justify-content: center; }
+  @media(min-width:600px){ .overlay { align-items: center; } }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius) var(--radius) 0 0; width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; padding: 20px; }
+  @media(min-width:600px){ .modal { border-radius: var(--radius); } }
+  .modal h2 { color: var(--accent); margin-bottom: 16px; font-size: 1.1rem; }
+  .modal-close { float: right; background: none; border: none; color: var(--text-muted); font-size: 1.4rem; cursor: pointer; line-height: 1; }
+  .form-row { margin-bottom: 12px; }
+  .form-row label { display: block; font-size: 0.78rem; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .form-row input, .form-row select, .form-row textarea { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); padding: 8px 10px; font-family: var(--font); font-size: 0.9rem; }
+  .form-row input:focus, .form-row select:focus, .form-row textarea:focus { outline: none; border-color: var(--accent); }
+  .form-row select option { background: var(--surface2); }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+
+  /* Admin view */
+  .admin-grid { display: grid; gap: 12px; }
+  @media(min-width:600px){ .admin-grid { grid-template-columns: 1fr 1fr; } }
+  .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 0.88rem; }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-label { color: var(--text-muted); }
+  .stat-value { color: var(--text); font-weight: bold; }
+
+  /* Favour track */
+  .favour-track { display: flex; gap: 6px; justify-content: center; margin: 12px 0; }
+  .favour-pip { width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 0.75rem; color: var(--text-muted); cursor: pointer; transition: all 0.2s; }
+  .favour-pip.active { border-color: var(--accent); color: var(--accent); background: rgba(200,151,58,0.15); }
+  .favour-pip.pos { border-color: var(--green); color: var(--green); }
+  .favour-pip.neg { border-color: var(--red); color: var(--red); }
+
+  /* Resources input */
+  .res-edit { display: flex; align-items: center; gap: 8px; }
+  .res-edit input { width: 80px; text-align: center; }
+  .res-adj { background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: 4px; width: 28px; height: 28px; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center; }
+
+  /* Loading */
+  #loading { position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; z-index: 999; flex-direction: column; gap: 12px; color: var(--accent); font-size: 1rem; }
+  .spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Setup screen */
+  #setup { padding: 24px 16px; max-width: 480px; margin: 0 auto; }
+  #setup h2 { color: var(--accent); margin-bottom: 8px; }
+  #setup p { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px; line-height: 1.5; }
+  #setup .setup-step { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
+  #setup .setup-step h3 { font-size: 0.9rem; color: var(--accent2); margin-bottom: 8px; }
+  #setup code { background: var(--surface2); padding: 2px 6px; border-radius: 4px; font-size: 0.85rem; color: var(--accent); font-family: monospace; }
+  #setup a { color: var(--accent2); }
+
+  /* Filter bar */
+  .filter-bar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .filter-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--text-muted); border-radius: 20px; padding: 4px 12px; font-size: 0.78rem; cursor: pointer; transition: all 0.2s; }
+  .filter-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(200,151,58,0.1); }
+
+  .empty-state { text-align: center; padding: 32px; color: var(--text-muted); font-size: 0.9rem; }
+
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--surface2); border: 1px solid var(--accent); color: var(--text); padding: 10px 20px; border-radius: var(--radius); z-index: 500; font-size: 0.88rem; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div id="loading"><div class="spinner"></div>Loading campaign data…</div>
+
+<div id="app" style="display:none">
+  <header>
+    <h1>⚓ Biscay & Iberian Station</h1>
+    <div class="turn-badge" onclick="openTurnModal()">Turn <span id="hdr-turn">1</span> · Phase <span id="hdr-phase">1</span></div>
+  </header>
+  <nav id="main-nav">
+    <button class="active" onclick="showTab('overview')">Overview</button>
+    <button onclick="showTab('british')">British</button>
+    <button onclick="showTab('french')">French</button>
+    <button onclick="showTab('spanish')">Spanish</button>
+    <button onclick="showTab('merchant')">Convoy</button>
+    <button onclick="showTab('log')">Log</button>
+  </nav>
+  <main id="main-content"></main>
+</div>
+
+<div id="setup-screen" style="display:none">
+  <header><h1>⚓ Biscay & Iberian Station</h1></header>
+  <div id="setup">
+    <h2>Firebase Setup Required</h2>
+    <p>This app uses Firebase Realtime Database for live sync across all players' devices. You need a free Firebase project — setup takes about 5 minutes.</p>
+    <div class="setup-step">
+      <h3>Step 1 — Create a Firebase project</h3>
+      <p>Go to <a href="https://console.firebase.google.com" target="_blank">console.firebase.google.com</a>, create a project (any name), then add a <strong>Realtime Database</strong> in test mode.</p>
+    </div>
+    <div class="setup-step">
+      <h3>Step 2 — Get your config</h3>
+      <p>In Project Settings → Your apps → Add web app. Copy the <code>firebaseConfig</code> object values.</p>
+    </div>
+    <div class="setup-step">
+      <h3>Step 3 — Enter your config below</h3>
+      <div class="form-row"><label>API Key</label><input id="cfg-apiKey" placeholder="AIza…"></div>
+      <div class="form-row"><label>Auth Domain</label><input id="cfg-authDomain" placeholder="yourproject.firebaseapp.com"></div>
+      <div class="form-row"><label>Database URL</label><input id="cfg-dbUrl" placeholder="https://yourproject-default-rtdb.firebaseio.com"></div>
+      <div class="form-row"><label>Project ID</label><input id="cfg-projectId" placeholder="yourproject"></div>
+      <div class="form-row"><label>App ID</label><input id="cfg-appId" placeholder="1:…:web:…"></div>
+      <button class="btn" onclick="saveConfig()" style="width:100%;margin-top:8px">Save & Connect</button>
+    </div>
+    <p style="margin-top:12px;font-size:0.8rem;color:var(--text-muted)">Config is stored in your browser only. Share the URL with players once connected — they enter the same config on first visit, or you can pre-fill it in the HTML.</p>
+  </div>
+</div>
+
+<!-- Modal container -->
+<div id="modal-overlay" class="overlay" style="display:none" onclick="closeModalOnOverlay(event)">
+  <div class="modal" id="modal-content"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Firebase SDK -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, set, get, update, remove, onValue, push } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+// ─── CONFIG ──────────────────────────────────────────────────────────────────
+// Pre-fill your Firebase config here to skip the setup screen for all players:
+  const firebaseConfig = {
+
+    apiKey: "AIzaSyCqJhwyq_Sxwx8mn7IFTMmIHk15vmrJehY",
+
+    authDomain: "black-seas-iberian-campaign.firebaseapp.com",
+
+    databaseURL: "https://black-seas-iberian-campaign-default-rtdb.europe-west1.firebasedatabase.app",
+
+    projectId: "black-seas-iberian-campaign",
+
+    storageBucket: "black-seas-iberian-campaign.firebasestorage.app",
+
+    messagingSenderId: "47940591786",
+
+    appId: "1:47940591786:web:9f2323f7e02dc6d7cd70d3"
+
+  };
+
+// ─── STATE ───────────────────────────────────────────────────────────────────
+let db, appData = {}, currentTab = 'overview', activeFilter = 'all';
+
+const FACTIONS = ['British','French','Spanish'];
+const FACTION_COLOR = { British:'var(--british)', French:'var(--french)', Spanish:'var(--spanish)', Merchant:'var(--merchant)' };
+const CREW_LEVELS = ['Inexperienced','Regular','Veteran'];
+const RANKS = ['Master and Commander','Post Captain'];
+const FAVOUR_LABELS = ['-2','-1','0','+1','+2'];
+
+// ─── INITIAL DATA ────────────────────────────────────────────────────────────
+const SEED = {
+  meta: { turn: 3, phase: 1 },
+  players: {
+    ethan:  { name:'Ethan',  faction:'British', resources:864, officerName:'Thomas Harrington',     rank:'Master and Commander', admiraltyFavour:1 },
+    cal:    { name:'Cal',    faction:'Spanish', resources:508, officerName:'Don Rafael Quintana',    rank:'Master and Commander', admiraltyFavour:0 },
+    dixieF: { name:'Dixie',  faction:'French',  resources:695, officerName:'Étienne-Henri Valois',   rank:'Master and Commander', admiraltyFavour:0 },
+    dixieB: { name:'Dixie',  faction:'British', resources:814, officerName:'Jonathan Fairleigh',     rank:'Master and Commander', admiraltyFavour:0 },
+  },
+  ships: {
+    // British – Dixie
+    bs1:  { player:'dixieB', faction:'British', name:'HMS Snake',        type:'18 Gun Brig',       cost:135, spCurrent:23, spMax:23, location:'Zone 6', squadron:'A', officer:'Jonathan Fairleigh', battlesWithoutStriking:2, crewLevel:'Regular',       repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    bs2:  { player:'dixieB', faction:'British', name:'HMS Goldfinch',    type:'10 Gun Schooner',   cost:70,  spCurrent:13, spMax:13, location:'Zone 6', squadron:'A', officer:'', battlesWithoutStriking:2, crewLevel:'Regular',       repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    bs3:  { player:'dixieB', faction:'British', name:'HMS Vigilant',     type:'18 Gun Brig',       cost:108, spCurrent:23, spMax:23, location:'Zone 6', squadron:'A', officer:'', battlesWithoutStriking:1, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    bs4:  { player:'dixieB', faction:'British', name:'HMS Goldfinch',    type:'10 Gun Schooner',   cost:56,  spCurrent:13, spMax:13, location:'Zone 6', squadron:'A', officer:'', battlesWithoutStriking:1, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    bs5:  { player:'dixieB', faction:'British', name:'HMS Ranger',       type:'10 Gun Brig',       cost:56,  spCurrent:13, spMax:13, location:'Zone 5', squadron:'B', officer:'', battlesWithoutStriking:0, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    bs6:  { player:'dixieB', faction:'British', name:'HMS Otter',        type:'10 Gun Cutter',     cost:44,  spCurrent:13, spMax:13, location:'Zone 5', squadron:'B', officer:'', battlesWithoutStriking:0, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    bs7:  { player:'dixieB', faction:'British', name:'HMS Mercury',      type:'18 Gun Brig',       cost:80,  spCurrent:23, spMax:23, location:'Zone 5', squadron:'B', officer:'', battlesWithoutStriking:0, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    bs8:  { player:'dixieB', faction:'British', name:'HMS Victor',       type:'18 Gun Brig',       cost:108, spCurrent:23, spMax:23, location:'Zone 5', squadron:'B', officer:'', battlesWithoutStriking:0, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    bs9:  { player:'dixieB', faction:'British', name:'HMS Lapwing',      type:'10 Gun Schooner',   cost:70,  spCurrent:8,  spMax:13, location:'Zone 7', squadron:'', officer:'',  battlesWithoutStriking:1, crewLevel:'Regular',       repairPort:'', repairCostPaid:0, availableIn:'', notes:'Boarded and Captured El Vengador', status:'active' },
+    bs10: { player:'dixieB', faction:'British', name:'El Vengador',      type:'16 Gun Brig',       cost:72,  spCurrent:1,  spMax:20, location:'Gibraltar', squadron:'', officer:'', battlesWithoutStriking:0, crewLevel:'Inexperienced', repairPort:'Gibraltar', repairCostPaid:19, availableIn:'Turn 4', notes:'Purchased into Service', status:'repairing' },
+    // British – Ethan
+    be1:  { player:'ethan',  faction:'British', name:'HMS Arrow',        type:'10 Gun Schooner',   cost:70,  spCurrent:8,  spMax:13, location:'Zone 4', squadron:'A', officer:'Thomas Harrington', battlesWithoutStriking:3, crewLevel:'Regular',       repairPort:'', repairCostPaid:0, availableIn:'', notes:'Escorting Merchant Convoy', status:'active' },
+    be2:  { player:'ethan',  faction:'British', name:'HMS Ferret',       type:'10 Gun Cutter',     cost:44,  spCurrent:11, spMax:13, location:'Zone 4', squadron:'A', officer:'', battlesWithoutStriking:2, crewLevel:'Regular',       repairPort:'', repairCostPaid:0, availableIn:'', notes:'Escorting Merchant Convoy', status:'active' },
+    be3:  { player:'ethan',  faction:'British', name:'HMS Entreprenante',type:'10 Gun Cutter',     cost:48,  spCurrent:10, spMax:13, location:'Zone 4', squadron:'A', officer:'', battlesWithoutStriking:2, crewLevel:'Regular',       repairPort:'Damaged Rudder', repairCostPaid:0, availableIn:'', notes:'Escorting Merchant Convoy', status:'active' },
+    be4:  { player:'ethan',  faction:'British', name:'HMS Victor',       type:'18 Gun Brig',       cost:108, spCurrent:8,  spMax:23, location:'Zone 2', squadron:'B', officer:'', battlesWithoutStriking:2, crewLevel:'Regular',       repairPort:'', repairCostPaid:0, availableIn:'', notes:'Blew up Spanish powder transport', status:'active' },
+    be5:  { player:'ethan',  faction:'British', name:'HMS Ranger',       type:'10 Gun Brig',       cost:56,  spCurrent:5,  spMax:13, location:'Zone 2', squadron:'B', officer:'', battlesWithoutStriking:2, crewLevel:'Regular',       repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    be6:  { player:'ethan',  faction:'British', name:'HMS Lapwing',      type:'10 Gun Schooner',   cost:56,  spCurrent:7,  spMax:13, location:'Zone 2', squadron:'B', officer:'', battlesWithoutStriking:2, crewLevel:'Regular',       repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    be7:  { player:'ethan',  faction:'British', name:'HMS Sprightly',    type:'10 Gun Schooner',   cost:56,  spCurrent:2,  spMax:13, location:'Plymouth', squadron:'', officer:'', battlesWithoutStriking:1, crewLevel:'Inexperienced', repairPort:'Plymouth', repairCostPaid:21, availableIn:'Turn 4', notes:'', status:'repairing' },
+    // British lost
+    bl1:  { player:'ethan',  faction:'British', name:'HMS Badger',       type:'10 Gun Brig',       cost:56,  spCurrent:0,  spMax:13, location:'Zone 2', squadron:'B', officer:'', battlesWithoutStriking:0, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'Captured by Le Decide', status:'lost' },
+    bl2:  { player:'ethan',  faction:'British', name:'HMS Pickle',       type:'10 Gun Schooner',   cost:48,  spCurrent:2,  spMax:13, location:'Zone 2', squadron:'B', officer:'', battlesWithoutStriking:0, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'Captured by Le Jupiter', status:'lost' },
+    bl3:  { player:'ethan',  faction:'British', name:'HMS Vigilant',     type:'18 Gun Brig',       cost:108, spCurrent:23, spMax:23, location:'Zone 3', squadron:'A', officer:'', battlesWithoutStriking:1, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'Sunk by L\'Audacieux', status:'lost' },
+    // French – Dixie
+    fd1:  { player:'dixieF', faction:'French', name:'Le Decide',         type:'18 Gun Brig',       cost:115, spCurrent:19, spMax:23, location:'Zone 2', squadron:'A', officer:'', battlesWithoutStriking:1, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'Captured HMS Badger', status:'active' },
+    fd2:  { player:'dixieF', faction:'French', name:'La Fouine',         type:'8 Gun Lugger',      cost:60,  spCurrent:10, spMax:10, location:'Zone 2', squadron:'A', officer:'', battlesWithoutStriking:3, crewLevel:'Regular',       repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    fd3:  { player:'dixieF', faction:'French', name:'Le Jupiter',        type:'8 Gun Lugger',      cost:60,  spCurrent:10, spMax:10, location:'Zone 2', squadron:'A', officer:'', battlesWithoutStriking:3, crewLevel:'Regular',       repairPort:'', repairCostPaid:0, availableIn:'', notes:'Captured HMS Pickle', status:'active' },
+    fd4:  { player:'dixieF', faction:'French', name:'La Sagesse',        type:'28 Gun 6th Rate',   cost:155, spCurrent:35, spMax:35, location:'Zone 2', squadron:'A', officer:'Étienne-Henri Valois', battlesWithoutStriking:3, crewLevel:'Regular', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    fd5:  { player:'dixieF', faction:'French', name:'L\'Audaciuex',      type:'16 Gun Brig',       cost:115, spCurrent:20, spMax:20, location:'Zone 3', squadron:'B', officer:'', battlesWithoutStriking:1, crewLevel:'Regular',       repairPort:'', repairCostPaid:0, availableIn:'', notes:'Sunk HMS Vigilant', status:'active' },
+    fd6:  { player:'dixieF', faction:'French', name:'Le Scoevola',       type:'10 Gun Brig',       cost:55,  spCurrent:13, spMax:13, location:'Zone 3', squadron:'B', officer:'', battlesWithoutStriking:1, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    fd7:  { player:'dixieF', faction:'French', name:'La Vive',           type:'8 Gun Lugger',      cost:48,  spCurrent:10, spMax:10, location:'Zone 3', squadron:'C', officer:'', battlesWithoutStriking:0, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    fd8:  { player:'dixieF', faction:'French', name:'Le Sirocco',        type:'8 Gun Lugger',      cost:48,  spCurrent:10, spMax:10, location:'Zone 3', squadron:'C', officer:'', battlesWithoutStriking:0, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    fd9:  { player:'dixieF', faction:'French', name:'Le Patriote',       type:'18 Gun Brig',       cost:92,  spCurrent:23, spMax:23, location:'Zone 3', squadron:'C', officer:'', battlesWithoutStriking:0, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    fd10: { player:'dixieF', faction:'French', name:'HMS Badger',        type:'10 Gun Brig',       cost:56,  spCurrent:2,  spMax:13, location:'Brest',  squadron:'', officer:'',  battlesWithoutStriking:0, crewLevel:'Inexperienced', repairPort:'Brest', repairCostPaid:11, availableIn:'Turn 4', notes:'Purchased into Service', status:'repairing' },
+    fd11: { player:'dixieF', faction:'French', name:'L\'Hirondelle',     type:'10 Gun Schooner',   cost:55,  spCurrent:13, spMax:13, location:'Brest',  squadron:'', officer:'',  battlesWithoutStriking:1, crewLevel:'Inexperienced', repairPort:'Brest', repairCostPaid:10, availableIn:'Turn 4', notes:'', status:'repairing' },
+    fd12: { player:'dixieF', faction:'French', name:'L\'Evielle',        type:'10 Gun Cutter',     cost:55,  spCurrent:13, spMax:13, location:'Rochefort', squadron:'', officer:'', battlesWithoutStriking:2, crewLevel:'Regular', repairPort:'Rochefort', repairCostPaid:7, availableIn:'Turn 5', notes:'', status:'repairing' },
+    fd13: { player:'dixieF', faction:'French', name:'Le Furieux',        type:'16 Gun Brig',       cost:88,  spCurrent:10, spMax:20, location:'Rochefort', squadron:'', officer:'', battlesWithoutStriking:1, crewLevel:'Inexperienced', repairPort:'Rochefort', repairCostPaid:10, availableIn:'Turn 4', notes:'', status:'repairing' },
+    // French lost
+    fl1:  { player:'dixieF', faction:'French', name:'L\'Alerte',         type:'10 Gun Schooner',   cost:56,  spCurrent:0,  spMax:13, location:'Zone 3', squadron:'B', officer:'', battlesWithoutStriking:1, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'Sunk after collision with Le Furieux', status:'lost' },
+    fl2:  { player:'dixieF', faction:'French', name:'HMS Pickle',        type:'10 Gun Schooner',   cost:52,  spCurrent:2,  spMax:13, location:'Brest',  squadron:'', officer:'',  battlesWithoutStriking:0, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'Paid off as Prize Money (52)', status:'lost' },
+    // Spanish – Cal
+    sc1:  { player:'cal', faction:'Spanish', name:'La Tormenta',         type:'26 Gun 6th Rate',   cost:120, spCurrent:33, spMax:33, location:'Zone 4', squadron:'C', officer:'', battlesWithoutStriking:1, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    sc2:  { player:'cal', faction:'Spanish', name:'Sin Lombre',          type:'18 Gun Brig',       cost:80,  spCurrent:23, spMax:23, location:'Zone 4', squadron:'C', officer:'', battlesWithoutStriking:1, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    sc3:  { player:'cal', faction:'Spanish', name:'La Bailar',           type:'18 Gun Brig',       cost:80,  spCurrent:23, spMax:23, location:'Zone 4', squadron:'C', officer:'', battlesWithoutStriking:1, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    sc4:  { player:'cal', faction:'Spanish', name:'(unnamed 6th Rate)',  type:'26 Gun 6th Rate',   cost:120, spCurrent:33, spMax:33, location:'Zone 6', squadron:'A', officer:'Don Rafael Quintana', battlesWithoutStriking:2, crewLevel:'Regular', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    sc5:  { player:'cal', faction:'Spanish', name:'San Carlos',          type:'18 Gun Brig',       cost:110, spCurrent:23, spMax:23, location:'Zone 6', squadron:'A', officer:'', battlesWithoutStriking:0, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    sc6:  { player:'cal', faction:'Spanish', name:'Cuervo',              type:'16 Gun Brig',       cost:90,  spCurrent:20, spMax:20, location:'Zone 6', squadron:'A', officer:'', battlesWithoutStriking:2, crewLevel:'Regular',       repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    sc7:  { player:'cal', faction:'Spanish', name:'La Valentia',         type:'16 Gun Brig',       cost:72,  spCurrent:17, spMax:20, location:'Zone 6', squadron:'A', officer:'', battlesWithoutStriking:1, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    sc8:  { player:'cal', faction:'Spanish', name:'La Serpiente',        type:'16 Gun Brig',       cost:72,  spCurrent:20, spMax:20, location:'Zone 6', squadron:'A', officer:'', battlesWithoutStriking:1, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    sc9:  { player:'cal', faction:'Spanish', name:'Limeno',              type:'16 Gun Brig',       cost:72,  spCurrent:20, spMax:20, location:'Zone 3', squadron:'B', officer:'', battlesWithoutStriking:0, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    sc10: { player:'cal', faction:'Spanish', name:'Peruano',             type:'16 Gun Brig',       cost:72,  spCurrent:20, spMax:20, location:'Zone 3', squadron:'B', officer:'', battlesWithoutStriking:0, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    sc11: { player:'cal', faction:'Spanish', name:'Resolucion',          type:'18 Gun Brig',       cost:80,  spCurrent:23, spMax:23, location:'Zone 3', squadron:'B', officer:'', battlesWithoutStriking:0, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    // Spanish lost
+    sl1:  { player:'cal', faction:'Spanish', name:'El Vengador',         type:'16 Gun Brig',       cost:72,  spCurrent:1,  spMax:20, location:'Zone 7', squadron:'A', officer:'', battlesWithoutStriking:1, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'Captured by HMS Lapwing', status:'lost' },
+    // Merchant Convoy
+    mc1:  { player:'merchant', faction:'Merchant', name:'De Jonge Willem', type:'Whaler', cost:100, spCurrent:14, spMax:20, location:'Zone 3', squadron:'1', officer:'', battlesWithoutStriking:4, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    mc2:  { player:'merchant', faction:'Merchant', name:'Noordster',       type:'Whaler', cost:100, spCurrent:20, spMax:20, location:'Zone 3', squadron:'1', officer:'', battlesWithoutStriking:4, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    mc3:  { player:'merchant', faction:'Merchant', name:'De Zeeleeuw',     type:'Whaler', cost:100, spCurrent:18, spMax:20, location:'Zone 3', squadron:'1', officer:'', battlesWithoutStriking:4, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+  },
+  log: {}
+};
+
+// ─── BOOT ─────────────────────────────────────────────────────────────────────
+async function boot() {
+  // Check for pre-filled or stored config
+  const stored = localStorage.getItem('bs_firebase_config');
+  let cfg = null;
+  if (PRECONFIG.apiKey) {
+    cfg = PRECONFIG;
+  } else if (stored) {
+    try { cfg = JSON.parse(stored); } catch(e) {}
+  }
+  if (!cfg || !cfg.apiKey) {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('setup-screen').style.display = 'block';
+    return;
+  }
+  await connect(cfg);
+}
+
+async function connect(cfg) {
+  try {
+    const app = initializeApp(cfg);
+    db = getDatabase(app);
+    // Check if data exists; if not, seed it
+    const snap = await get(ref(db, '/'));
+    if (!snap.exists()) {
+      await set(ref(db, '/'), SEED);
+    }
+    // Subscribe to live updates
+    onValue(ref(db, '/'), (snapshot) => {
+      appData = snapshot.val() || {};
+      renderCurrentTab();
+    });
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+  } catch(e) {
+    document.getElementById('loading').innerHTML = `<div style="color:var(--red);padding:20px;text-align:center">Firebase connection failed:<br>${e.message}<br><br><button class="btn" onclick="location.reload()">Retry</button></div>`;
+  }
+}
+
+window.saveConfig = function() {
+  const cfg = {
+    apiKey:       document.getElementById('cfg-apiKey').value.trim(),
+    authDomain:   document.getElementById('cfg-authDomain').value.trim(),
+    databaseURL:  document.getElementById('cfg-dbUrl').value.trim(),
+    projectId:    document.getElementById('cfg-projectId').value.trim(),
+    appId:        document.getElementById('cfg-appId').value.trim(),
+  };
+  if (!cfg.apiKey || !cfg.databaseURL) { showToast('Please fill in API Key and Database URL'); return; }
+  localStorage.setItem('bs_firebase_config', JSON.stringify(cfg));
+  document.getElementById('setup-screen').style.display = 'none';
+  document.getElementById('loading').style.display = 'flex';
+  connect(cfg);
+};
+
+// ─── NAVIGATION ───────────────────────────────────────────────────────────────
+window.showTab = function(tab) {
+  currentTab = tab;
+  activeFilter = 'all';
+  document.querySelectorAll('nav button').forEach((b,i) => b.classList.toggle('active', b.getAttribute('onclick').includes(`'${tab}'`)));
+  renderCurrentTab();
+};
+
+function renderCurrentTab() {
+  if (!appData.meta) return;
+  document.getElementById('hdr-turn').textContent = appData.meta.turn;
+  document.getElementById('hdr-phase').textContent = appData.meta.phase;
+  const c = document.getElementById('main-content');
+  switch(currentTab) {
+    case 'overview': c.innerHTML = renderOverview(); break;
+    case 'british':  c.innerHTML = renderFaction('British'); break;
+    case 'french':   c.innerHTML = renderFaction('French'); break;
+    case 'spanish':  c.innerHTML = renderFaction('Spanish'); break;
+    case 'merchant': c.innerHTML = renderMerchant(); break;
+    case 'log':      c.innerHTML = renderLog(); break;
+  }
+}
+
+// ─── OVERVIEW ─────────────────────────────────────────────────────────────────
+function renderOverview() {
+  const players = appData.players || {};
+  const ships = appData.ships || {};
+  let html = `<div class="card"><div class="card-title">Campaign Status</div>
+    <div class="stat-row"><span class="stat-label">Game Turn</span><span class="stat-value">${appData.meta.turn}</span></div>
+    <div class="stat-row"><span class="stat-label">Phase</span><span class="stat-value">${phaseLabel(appData.meta.phase)}</span></div>
+  </div>`;
+  html += `<div class="player-row">`;
+  for (const [pid, p] of Object.entries(players)) {
+    const pShips = Object.values(ships).filter(s => s.player === pid && s.status === 'active').length;
+    const favClass = p.admiraltyFavour > 0 ? 'fav-pos' : p.admiraltyFavour < 0 ? 'fav-neg' : 'fav-zero';
+    const favLabel = p.admiraltyFavour > 0 ? `+${p.admiraltyFavour}` : `${p.admiraltyFavour}`;
+    html += `<div class="player-card" onclick="showPlayerModal('${pid}')">
+      <h3><span class="faction-dot" style="background:${FACTION_COLOR[p.faction]}"></span>${p.name}</h3>
+      <div style="font-size:0.75rem;color:var(--text-muted)">${p.faction}</div>
+      <div class="res">${p.resources} <span style="font-size:0.7rem;color:var(--text-muted)">res</span></div>
+      <div class="favour">Favour: <span class="favour-val ${favClass}">${favLabel}</span> · ${pShips} ships</div>
+    </div>`;
+  }
+  html += `</div>`;
+  // Summary per faction
+  for (const faction of FACTIONS) {
+    const fShips = Object.values(ships).filter(s => s.faction === faction);
+    const active = fShips.filter(s => s.status === 'active');
+    const repairing = fShips.filter(s => s.status === 'repairing');
+    const lost = fShips.filter(s => s.status === 'lost');
+    html += `<div class="card"><div class="card-title" style="color:${FACTION_COLOR[faction]}">${faction}</div>
+      <div class="stat-row"><span class="stat-label">Active</span><span class="stat-value">${active.length}</span></div>
+      <div class="stat-row"><span class="stat-label">Repairing</span><span class="stat-value">${repairing.length}</span></div>
+      <div class="stat-row"><span class="stat-label">Lost/Captured</span><span class="stat-value">${lost.length}</span></div>
+    </div>`;
+  }
+  return html;
+}
+
+function phaseLabel(p) {
+  return ['','Phase I – The Shallow War','Phase II – The Cruising War','Phase III – Line of Battle'][p] || `Phase ${p}`;
+}
+
+// ─── FACTION VIEW ─────────────────────────────────────────────────────────────
+function renderFaction(faction) {
+  const players = Object.entries(appData.players || {}).filter(([,p]) => p.faction === faction);
+  const allShips = appData.ships || {};
+  let html = '';
+
+  // Player cards
+  html += `<div class="player-row">`;
+  for (const [pid, p] of players) {
+    const favClass = p.admiraltyFavour > 0 ? 'fav-pos' : p.admiraltyFavour < 0 ? 'fav-neg' : 'fav-zero';
+    const favLabel = p.admiraltyFavour > 0 ? `+${p.admiraltyFavour}` : `${p.admiraltyFavour}`;
+    html += `<div class="player-card" onclick="showPlayerModal('${pid}')">
+      <h3>${p.name}</h3>
+      <div style="font-size:0.75rem;color:var(--text-muted)">${p.officerName} · ${p.rank === 'Post Captain' ? 'Post Captain' : 'M&C'}</div>
+      <div class="res">${p.resources} <span style="font-size:0.7rem;color:var(--text-muted)">resources</span></div>
+      <div class="favour">Favour: <span class="favour-val ${favClass}">${favLabel}</span></div>
+    </div>`;
+  }
+  html += `</div>`;
+
+  // Filter
+  html += `<div class="filter-bar">
+    ${['all','active','repairing','lost'].map(f => `<button class="filter-btn${activeFilter===f?' active':''}" onclick="setFilter('${f}')">${f.charAt(0).toUpperCase()+f.slice(1)}</button>`).join('')}
+  </div>`;
+
+  // Ships grouped by player
+  for (const [pid, p] of players) {
+    const pShips = Object.entries(allShips)
+      .filter(([,s]) => s.faction === faction && s.player === pid)
+      .filter(([,s]) => activeFilter === 'all' || s.status === activeFilter);
+    if (!pShips.length && activeFilter !== 'all') continue;
+
+    html += `<div class="ships-header"><div style="font-size:0.9rem;color:var(--text)">${p.name}'s Fleet</div>
+      <button class="btn btn-sm" onclick="openAddShip('${pid}','${faction}')">+ Add Ship</button>
+    </div>`;
+
+    // Group active ships by squadron
+    const active = pShips.filter(([,s]) => s.status === 'active');
+    const repairing = pShips.filter(([,s]) => s.status === 'repairing');
+    const lost = pShips.filter(([,s]) => s.status === 'lost');
+
+    if (active.length || (activeFilter === 'all' && active.length === 0 && repairing.length === 0)) {
+      if (activeFilter === 'all' || activeFilter === 'active') {
+        const bySquadron = {};
+        active.forEach(([id,s]) => { const sq = s.squadron || '(no squadron)'; (bySquadron[sq]||(bySquadron[sq]=[])).push([id,s]); });
+        for (const [sq, sqs] of Object.entries(bySquadron)) {
+          if (sq !== '(no squadron)') html += `<div class="section-label">Squadron ${sq}</div>`;
+          else html += `<div class="section-label">Individual / Detached</div>`;
+          html += `<div class="ship-list">${sqs.map(([id,s]) => shipCard(id,s)).join('')}</div>`;
+        }
+      }
+    }
+
+    if (activeFilter === 'all' || activeFilter === 'repairing') {
+      if (repairing.length) { html += `<div class="section-label">In Repair</div><div class="ship-list">${repairing.map(([id,s]) => shipCard(id,s)).join('')}</div>`; }
+    }
+    if (activeFilter === 'all' || activeFilter === 'lost') {
+      if (lost.length) { html += `<div class="section-label">Lost / Captured</div><div class="ship-list">${lost.map(([id,s]) => shipCard(id,s)).join('')}</div>`; }
+    }
+    if (!pShips.length) html += `<div class="empty-state">No ships to show.</div>`;
+  }
+  return html;
+}
+
+function shipCard(id, s) {
+  const pct = s.spMax > 0 ? s.spCurrent / s.spMax : 1;
+  const spClass = pct <= 0.25 ? 'critical' : pct <= 0.5 ? 'damaged' : '';
+  const crewClass = s.crewLevel === 'Veteran' ? 'crew-vet' : s.crewLevel === 'Regular' ? 'crew-reg' : 'crew-inex';
+  const barColor = pct > 0.6 ? 'var(--green)' : pct > 0.3 ? '#e8a44a' : 'var(--red)';
+  return `<div class="ship-card ${s.status}" id="sc-${id}">
+    <div class="ship-top">
+      <div>
+        <div class="ship-name">${s.name}</div>
+        <div class="ship-type">${s.type}${s.officer ? ` · <em>${s.officer}</em>` : ''}</div>
+        ${s.squadron ? `<div class="squadron-label">Sqn ${s.squadron}</div>` : ''}
+      </div>
+      <div class="ship-actions">
+        <button class="btn btn-sm btn-ghost" onclick="openEditShip('${id}')">Edit</button>
+      </div>
+    </div>
+    <div class="ship-meta">
+      <span class="tag sp ${spClass}">SP ${s.spCurrent}/${s.spMax}</span>
+      <span class="tag ${crewClass}">${s.crewLevel}</span>
+      <span class="tag">${s.location}</span>
+      ${s.battlesWithoutStriking > 0 ? `<span class="tag">${s.battlesWithoutStriking} battle${s.battlesWithoutStriking>1?'s':''}</span>` : ''}
+      ${s.repairPort ? `<span class="tag" style="color:var(--accent2)">⚓ ${s.repairPort}</span>` : ''}
+      ${s.availableIn ? `<span class="tag" style="color:var(--accent)">Avail. ${s.availableIn}</span>` : ''}
+    </div>
+    <div class="sp-bar-wrap"><div class="sp-bar" style="width:${Math.max(0,pct*100)}%;background:${barColor}"></div></div>
+    ${s.notes ? `<div class="ship-notes">${s.notes}</div>` : ''}
+  </div>`;
+}
+
+// ─── MERCHANT ─────────────────────────────────────────────────────────────────
+function renderMerchant() {
+  const ships = Object.entries(appData.ships || {}).filter(([,s]) => s.faction === 'Merchant');
+  let html = `<div class="ships-header"><div style="font-size:0.9rem">Merchant Convoy</div>
+    <button class="btn btn-sm" onclick="openAddShip('merchant','Merchant')">+ Add Ship</button>
+  </div><div class="ship-list">`;
+  if (!ships.length) html += `<div class="empty-state">No merchant ships.</div>`;
+  else html += ships.map(([id,s]) => shipCard(id,s)).join('');
+  html += `</div>`;
+  return html;
+}
+
+// ─── LOG ──────────────────────────────────────────────────────────────────────
+function renderLog() {
+  const log = appData.log || {};
+  const entries = Object.entries(log).sort(([a],[b]) => b.localeCompare(a));
+  let html = `<div class="ships-header"><div>Campaign Log</div><button class="btn btn-sm" onclick="openAddLog()">+ Add Entry</button></div>`;
+  if (!entries.length) html += `<div class="empty-state">No log entries yet.</div>`;
+  else html += entries.map(([id,e]) => `<div class="card" style="margin-bottom:8px">
+    <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px">Turn ${e.turn} · ${e.faction || ''} · ${e.timestamp||''}</div>
+    <div style="font-size:0.9rem">${e.text}</div>
+  </div>`).join('');
+  return html;
+}
+
+// ─── FILTERS ─────────────────────────────────────────────────────────────────
+window.setFilter = function(f) {
+  activeFilter = f;
+  renderCurrentTab();
+};
+
+// ─── TURN MODAL ───────────────────────────────────────────────────────────────
+window.openTurnModal = function() {
+  const meta = appData.meta || {};
+  showModal(`<button class="modal-close" onclick="closeModal()">×</button>
+    <h2>Campaign Status</h2>
+    <div class="form-grid">
+      <div class="form-row"><label>Game Turn</label><input type="number" id="m-turn" value="${meta.turn}" min="1"></div>
+      <div class="form-row"><label>Phase (1–3)</label><input type="number" id="m-phase" value="${meta.phase}" min="1" max="3"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn" onclick="saveTurn()">Save</button>
+    </div>`);
+};
+
+window.saveTurn = async function() {
+  await update(ref(db, '/meta'), {
+    turn: parseInt(document.getElementById('m-turn').value),
+    phase: parseInt(document.getElementById('m-phase').value),
+  });
+  closeModal(); showToast('Campaign status updated');
+};
+
+// ─── PLAYER MODAL ─────────────────────────────────────────────────────────────
+window.showPlayerModal = function(pid) {
+  const p = (appData.players || {})[pid];
+  if (!p) return;
+  showModal(`<button class="modal-close" onclick="closeModal()">×</button>
+    <h2>${p.name} – ${p.faction}</h2>
+    <div class="form-row"><label>Player Name</label><input id="pm-name" value="${p.name}"></div>
+    <div class="form-row"><label>Officer Name</label><input id="pm-officer" value="${p.officerName||''}"></div>
+    <div class="form-row"><label>Rank</label><select id="pm-rank">${RANKS.map(r=>`<option${p.rank===r?' selected':''}>${r}</option>`).join('')}</select></div>
+    <div class="form-row"><label>Resources</label>
+      <div class="res-edit">
+        <button class="res-adj" onclick="adjRes('pm-res',-50)">−</button>
+        <input type="number" id="pm-res" value="${p.resources}" style="width:90px;text-align:center">
+        <button class="res-adj" onclick="adjRes('pm-res',50)">+</button>
+        <span style="font-size:0.75rem;color:var(--text-muted)">or type amount</span>
+      </div>
+    </div>
+    <div class="form-row"><label>Admiralty Favour</label>
+      <div class="favour-track">
+        ${FAVOUR_LABELS.map((l,i) => { const val=i-2; const cls = val===p.admiraltyFavour ? (val>0?'active pos':val<0?'active neg':'active') : '';
+          return `<div class="favour-pip ${cls}" onclick="setFavour('pm-favour',${val})" id="fp-${i}">${l}</div>`; }).join('')}
+      </div>
+      <input type="hidden" id="pm-favour" value="${p.admiraltyFavour}">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn" onclick="savePlayer('${pid}')">Save</button>
+    </div>`);
+};
+
+window.adjRes = function(id, amt) {
+  const el = document.getElementById(id);
+  el.value = Math.max(0, parseInt(el.value||0) + amt);
+};
+
+window.setFavour = function(hiddenId, val) {
+  document.getElementById(hiddenId).value = val;
+  FAVOUR_LABELS.forEach((l,i) => {
+    const pip = document.getElementById(`fp-${i}`);
+    if (!pip) return;
+    const pipVal = i-2;
+    pip.className = 'favour-pip' + (pipVal===val ? (val>0?' active pos':val<0?' active neg':' active') : '');
+  });
+};
+
+window.savePlayer = async function(pid) {
+  await update(ref(db, `/players/${pid}`), {
+    name: document.getElementById('pm-name').value.trim(),
+    officerName: document.getElementById('pm-officer').value.trim(),
+    rank: document.getElementById('pm-rank').value,
+    resources: parseInt(document.getElementById('pm-res').value)||0,
+    admiraltyFavour: parseInt(document.getElementById('pm-favour').value)||0,
+  });
+  closeModal(); showToast('Player updated');
+};
+
+// ─── SHIP MODALS ──────────────────────────────────────────────────────────────
+const ZONES = ['Zone 1','Zone 2','Zone 3','Zone 4','Zone 5','Zone 6','Zone 7','Plymouth','Cork','Brest','Lorient','La Rochelle','Rochefort','Bayonne','Santander','Ferrol','Coruña','Vigo','Lisbon','Cádiz','Gibraltar'];
+const STATUSES = ['active','repairing','lost'];
+
+function shipFormHtml(s) {
+  const players = Object.entries(appData.players || {});
+  return `
+    <div class="form-row"><label>Ship Name</label><input id="sf-name" value="${s.name||''}"></div>
+    <div class="form-grid">
+      <div class="form-row"><label>Type</label><input id="sf-type" value="${s.type||''}"></div>
+      <div class="form-row"><label>Cost (resources)</label><input type="number" id="sf-cost" value="${s.cost||0}"></div>
+    </div>
+    <div class="form-grid">
+      <div class="form-row"><label>SP Current</label><input type="number" id="sf-spCurrent" value="${s.spCurrent||0}" min="0"></div>
+      <div class="form-row"><label>SP Max</label><input type="number" id="sf-spMax" value="${s.spMax||0}" min="1"></div>
+    </div>
+    <div class="form-grid">
+      <div class="form-row"><label>Location</label><select id="sf-location">${ZONES.map(z=>`<option${s.location===z?' selected':''}>${z}</option>`).join('')}</select></div>
+      <div class="form-row"><label>Squadron</label><input id="sf-squadron" value="${s.squadron||''}"></div>
+    </div>
+    <div class="form-grid">
+      <div class="form-row"><label>Crew Level</label><select id="sf-crew">${CREW_LEVELS.map(c=>`<option${s.crewLevel===c?' selected':''}>${c}</option>`).join('')}</select></div>
+      <div class="form-row"><label>Status</label><select id="sf-status">${STATUSES.map(st=>`<option${s.status===st?' selected':''}>${st}</option>`).join('')}</select></div>
+    </div>
+    <div class="form-row"><label>Battles Without Striking</label><input type="number" id="sf-battles" value="${s.battlesWithoutStriking||0}" min="0"></div>
+    <div class="form-row"><label>Officer Assigned</label><input id="sf-officer" value="${s.officer||''}"></div>
+    <div class="form-grid">
+      <div class="form-row"><label>Repair Port</label><input id="sf-repairPort" value="${s.repairPort||''}"></div>
+      <div class="form-row"><label>Repair Cost Paid</label><input type="number" id="sf-repairCost" value="${s.repairCostPaid||0}"></div>
+    </div>
+    <div class="form-row"><label>Available in Turn</label><input id="sf-available" value="${s.availableIn||''}"></div>
+    <div class="form-row"><label>Transfer to Player</label><select id="sf-player">
+      <option value="${s.player||''}">(current)</option>
+      ${players.filter(([pid])=>pid!==(s.player||'')).map(([pid,p])=>`<option value="${pid}">${p.name} (${p.faction})</option>`).join('')}
+    </select></div>
+    <div class="form-row"><label>Notes</label><textarea id="sf-notes" rows="2">${s.notes||''}</textarea></div>`;
+}
+
+function readShipForm(existing) {
+  return {
+    ...existing,
+    name: document.getElementById('sf-name').value.trim(),
+    type: document.getElementById('sf-type').value.trim(),
+    cost: parseInt(document.getElementById('sf-cost').value)||0,
+    spCurrent: parseInt(document.getElementById('sf-spCurrent').value)||0,
+    spMax: parseInt(document.getElementById('sf-spMax').value)||1,
+    location: document.getElementById('sf-location').value,
+    squadron: document.getElementById('sf-squadron').value.trim(),
+    crewLevel: document.getElementById('sf-crew').value,
+    status: document.getElementById('sf-status').value,
+    battlesWithoutStriking: parseInt(document.getElementById('sf-battles').value)||0,
+    officer: document.getElementById('sf-officer').value.trim(),
+    repairPort: document.getElementById('sf-repairPort').value.trim(),
+    repairCostPaid: parseInt(document.getElementById('sf-repairCost').value)||0,
+    availableIn: document.getElementById('sf-available').value.trim(),
+    player: document.getElementById('sf-player').value || existing.player,
+    notes: document.getElementById('sf-notes').value.trim(),
+  };
+}
+
+window.openEditShip = function(id) {
+  const s = (appData.ships || {})[id];
+  if (!s) return;
+  showModal(`<button class="modal-close" onclick="closeModal()">×</button>
+    <h2>Edit ${s.name}</h2>
+    ${shipFormHtml(s)}
+    <div class="modal-actions">
+      <button class="btn btn-danger btn-sm" onclick="deleteShip('${id}')">Delete</button>
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn" onclick="saveShip('${id}')">Save</button>
+    </div>`);
+};
+
+window.openAddShip = function(playerId, faction) {
+  const blank = { player: playerId, faction, name:'', type:'', cost:0, spCurrent:13, spMax:13, location:'Zone 1', squadron:'', crewLevel:'Inexperienced', status:'active', battlesWithoutStriking:0, officer:'', repairPort:'', repairCostPaid:0, availableIn:'', notes:'' };
+  showModal(`<button class="modal-close" onclick="closeModal()">×</button>
+    <h2>Add New Ship</h2>
+    ${shipFormHtml(blank)}
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn" onclick="addShip('${playerId}','${faction}')">Add Ship</button>
+    </div>`);
+};
+
+window.saveShip = async function(id) {
+  const existing = (appData.ships || {})[id];
+  const data = readShipForm(existing);
+  await set(ref(db, `/ships/${id}`), data);
+  closeModal(); showToast('Ship updated');
+};
+
+window.addShip = async function(playerId, faction) {
+  const blank = { player: playerId, faction, name:'', type:'', cost:0, spCurrent:13, spMax:13, location:'Zone 1', squadron:'', crewLevel:'Inexperienced', status:'active', battlesWithoutStriking:0, officer:'', repairPort:'', repairCostPaid:0, availableIn:'', notes:'' };
+  const data = readShipForm(blank);
+  if (!data.name) { showToast('Ship needs a name'); return; }
+  const newRef = push(ref(db, '/ships'));
+  await set(newRef, data);
+  closeModal(); showToast(`${data.name} added`);
+};
+
+window.deleteShip = async function(id) {
+  const s = (appData.ships || {})[id];
+  if (!confirm(`Delete ${s?.name}? This cannot be undone.`)) return;
+  await remove(ref(db, `/ships/${id}`));
+  closeModal(); showToast('Ship removed');
+};
+
+// ─── LOG MODAL ────────────────────────────────────────────────────────────────
+window.openAddLog = function() {
+  const factions = ['British','French','Spanish','All'];
+  showModal(`<button class="modal-close" onclick="closeModal()">×</button>
+    <h2>Add Log Entry</h2>
+    <div class="form-row"><label>Faction</label><select id="log-faction">${factions.map(f=>`<option>${f}</option>`).join('')}</select></div>
+    <div class="form-row"><label>Entry</label><textarea id="log-text" rows="3" placeholder="Describe what happened…"></textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn" onclick="addLog()">Add</button>
+    </div>`);
+};
+
+window.addLog = async function() {
+  const text = document.getElementById('log-text').value.trim();
+  if (!text) return;
+  const entry = { turn: appData.meta?.turn||1, faction: document.getElementById('log-faction').value, text, timestamp: new Date().toLocaleDateString() };
+  await push(ref(db, '/log'), entry);
+  closeModal(); showToast('Log entry added');
+};
+
+// ─── MODAL HELPERS ────────────────────────────────────────────────────────────
+function showModal(html) {
+  document.getElementById('modal-content').innerHTML = html;
+  document.getElementById('modal-overlay').style.display = 'flex';
+}
+window.closeModal = function() { document.getElementById('modal-overlay').style.display = 'none'; };
+window.closeModalOnOverlay = function(e) { if (e.target === document.getElementById('modal-overlay')) closeModal(); };
+
+// ─── TOAST ───────────────────────────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+boot();
+</script>
+</body>
+</html>
