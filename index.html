@@ -444,7 +444,11 @@ async function connect(cfg) {
     document.getElementById('loading').style.display = 'none';
     document.getElementById('app').style.display = 'block';
   } catch(e) {
-    document.getElementById('loading').innerHTML = `<div style="color:var(--red);padding:20px;text-align:center">Firebase connection failed:<br>${e.message}<br><br><button class="btn" onclick="location.reload()">Retry</button></div>`;
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('setup-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    document.getElementById('app').innerHTML = `<div style="color:var(--red);padding:40px;text-align:center;font-size:1rem">Firebase connection failed:<br><br><strong>${e.message}</strong><br><br><button class="btn" onclick="location.reload()">Retry</button></div>`;
+    console.error('Firebase boot error:', e);
   }
 }
 
