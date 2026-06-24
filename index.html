@@ -98,19 +98,6 @@
   .sp-bar-wrap { margin-top: 6px; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
   .sp-bar { height: 100%; border-radius: 2px; transition: width 0.3s; }
 
-  /* Game stat bar */
-  .stat-bar { display:flex; align-items:center; gap:0; margin-top:8px; background:var(--surface); border:1px solid var(--border); border-radius:4px; overflow:hidden; font-size:0.72rem; }
-  .stat-bar-cell { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:4px 8px; border-right:1px solid var(--border); min-width:36px; flex:1; }
-  .stat-bar-cell:last-child { border-right:none; }
-  .stat-bar-label { color:var(--text-muted); font-size:0.62rem; text-transform:uppercase; letter-spacing:0.04em; line-height:1.2; }
-  .stat-bar-value { color:var(--text); font-weight:bold; line-height:1.4; }
-  .stat-bar-value.turn-red { color:var(--red); }
-  .stat-bar-value.turn-yellow { color:var(--accent); }
-  .stat-bar-value.turn-green { color:var(--green); }
-  .stat-bar-sp { display:flex; align-items:center; gap:4px; }
-  .sp-adj { background:none; border:1px solid var(--border); border-radius:3px; color:var(--text-muted); font-size:0.7rem; width:16px; height:16px; line-height:1; cursor:pointer; padding:0; display:flex; align-items:center; justify-content:center; }
-  .sp-adj:hover { border-color:var(--accent2); color:var(--accent2); }
-
   /* Modal */
   .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200; display: flex; align-items: flex-end; justify-content: center; }
   @media(min-width:600px){ .overlay { align-items: center; } }
@@ -267,38 +254,12 @@
     <div id="bldr-decks"></div>
     <button class="btn btn-ghost btn-sm" onclick="builderAddDeck()" style="margin-top:4px">+ Add Gun Deck</button>
 
-    <div class="form-grid" style="margin-top:12px">
-      <div class="form-row"><label>Bow Chaser</label>
-        <select id="bldr-bowchaser" onchange="builderCalc()">
-          <option value="-">None</option>
-          <option value="1L">1L – Light</option>
-          <option value="1M">1M – Medium</option>
-          <option value="1H">1H – Heavy</option>
-          <option value="1LC">1LC – Lt. Carronade</option>
-          <option value="1C">1C – Carronade</option>
-          <option value="1HC">1HC – Hvy. Carronade</option>
-        </select>
-      </div>
-      <div class="form-row"><label>Stern Chaser</label>
-        <select id="bldr-sternchaser" onchange="builderCalc()">
-          <option value="-">None</option>
-          <option value="1L">1L – Light</option>
-          <option value="1M">1M – Medium</option>
-          <option value="1H">1H – Heavy</option>
-          <option value="1LC">1LC – Lt. Carronade</option>
-          <option value="1C">1C – Carronade</option>
-          <option value="1HC">1HC – Hvy. Carronade</option>
-        </select>
-      </div>
-    </div>
+    <div class="section-label" style="margin-top:14px">Upgrades</div>
+    <div class="upgrade-grid" id="bldr-upgrades"></div>
 
     <div class="preview-bar" id="bldr-preview">
       <div class="preview-stat">SP: <span id="prev-sp">—</span></div>
       <div class="preview-stat">Broadsides: <span id="prev-broad">—</span></div>
-      <div class="preview-stat">Bow: <span id="prev-bow">—</span></div>
-      <div class="preview-stat">Stern: <span id="prev-stern">—</span></div>
-      <div class="preview-stat">Knots: <span id="prev-knots">—</span></div>
-      <div class="preview-stat">Break: <span id="prev-break">—</span></div>
       <div class="preview-stat">Cost: <span id="prev-cost">—</span> pts</div>
     </div>
 
@@ -352,37 +313,6 @@ import { getDatabase, ref, set, get, update, remove, onValue, push } from "https
 let db, appData = {}, currentTab = 'overview', activeFilter = 'all';
 
 const SHIP_TYPES = ['1st Rate','2nd Rate','3rd Rate','4th Rate','Razee','Heavy Frigate','5th Rate Frigate','6th Rate','Ship-Sloop','Brig-Sloop','Gun Brig','Corvette','Cutter','Schooner','Gunboat','Bomb Vessel','Xebec','Large Xebec','Polacre','Galley','Galiot','Tartane','Felucca','Merchantman','East Indiaman','Manila Galleon','Packet Ship','Privateer','Privateer Schooner','Privateer Brig','Privateer Cutter','Letter of Marque'];
-
-// Black Seas game stats by ship type (size, broadsides, stern battery, bow battery, turn colour, knots, break)
-const SHIP_STATS = {
-  // Small — S
-  '6 Gun Cutter':      { size:'S', broad:'2L', stern:'-', bow:'-', turn:'Green', knots:9, brk:3 },
-  '8 Gun Cutter':      { size:'S', broad:'2L', stern:'-', bow:'-', turn:'Green', knots:8, brk:3 },
-  '10 Gun Cutter':     { size:'S', broad:'2L', stern:'-', bow:'-', turn:'Green', knots:8, brk:3 },
-  '6 Gun Schooner':    { size:'S', broad:'2L', stern:'-', bow:'-', turn:'Green', knots:9, brk:3 },
-  '8 Gun Schooner':    { size:'S', broad:'2L', stern:'-', bow:'-', turn:'Green', knots:8, brk:3 },
-  '10 Gun Schooner':   { size:'S', broad:'2L', stern:'-', bow:'-', turn:'Green', knots:8, brk:3 },
-  '8 Gun Lugger':      { size:'S', broad:'2L', stern:'-', bow:'-', turn:'Green', knots:8, brk:3 },
-  '10 Gun Lugger':     { size:'S', broad:'2L', stern:'-', bow:'-', turn:'Green', knots:8, brk:3 },
-  // Medium brigs — M
-  '10 Gun Brig':       { size:'M', broad:'3L', stern:'-', bow:'-', turn:'Yellow', knots:6, brk:4 },
-  '14 Gun Brig':       { size:'M', broad:'3L', stern:'-', bow:'-', turn:'Yellow', knots:6, brk:5 },
-  '16 Gun Brig':       { size:'M', broad:'3L', stern:'-', bow:'-', turn:'Yellow', knots:6, brk:5 },
-  '18 Gun Brig':       { size:'M', broad:'3L', stern:'-', bow:'-', turn:'Yellow', knots:6, brk:6 },
-  '20 Gun Brig':       { size:'M', broad:'3L', stern:'-', bow:'-', turn:'Yellow', knots:6, brk:6 },
-  // 6th Rates — M
-  '22 Gun 6th Rate':   { size:'M', broad:'3L', stern:'1L', bow:'-', turn:'Red', knots:5, brk:7 },
-  '24 Gun 6th Rate':   { size:'M', broad:'3L', stern:'1L', bow:'-', turn:'Red', knots:5, brk:7 },
-  '26 Gun 6th Rate':   { size:'M', broad:'3L', stern:'1L', bow:'-', turn:'Red', knots:5, brk:8 },
-  '28 Gun 6th Rate':   { size:'M', broad:'3H', stern:'1L', bow:'-', turn:'Red', knots:5, brk:8 },
-  '32 Gun 5th Rate':   { size:'L', broad:'3H', stern:'1L', bow:'1L', turn:'Red', knots:5, brk:9 },
-  '36 Gun 5th Rate':   { size:'L', broad:'4H', stern:'1L', bow:'1L', turn:'Red', knots:5, brk:10 },
-  '38 Gun 5th Rate':   { size:'L', broad:'4H', stern:'1L', bow:'1L', turn:'Red', knots:5, brk:11 },
-  // Merchants
-  'Whaler':            { size:'M', broad:'2L', stern:'-', bow:'-', turn:'Red', knots:4, brk:5 },
-  'Merchantman':       { size:'M', broad:'2L', stern:'-', bow:'-', turn:'Red', knots:4, brk:5 },
-  'East Indiaman':     { size:'L', broad:'3H', stern:'1L', bow:'-', turn:'Red', knots:4, brk:8 },
-};
 const FACTIONS = ['British','French','Spanish'];
 const FACTION_COLOR = { British:'var(--british)', French:'var(--french)', Spanish:'var(--spanish)', Merchant:'var(--merchant)' };
 const FACTION_FLAG = { British:'🇬🇧', French:'🇫🇷', Spanish:'🇪🇸', Merchant:'🚢' };
@@ -392,12 +322,72 @@ const FAVOUR_LABELS = ['-2','-1','0','+1','+2'];
 
 // ─── INITIAL DATA ────────────────────────────────────────────────────────────
 const SEED = {
-  meta: { turn: 1, phase: 1 },
-  players: {},
+  meta: { turn: 3, phase: 1 },
+  players: {
+    ethan:  { name:'Ethan',  faction:'British', resources:864, officerName:'Thomas Harrington',     rank:'Master and Commander', admiraltyFavour:1 },
+    cal:    { name:'Cal',    faction:'Spanish', resources:508, officerName:'Don Rafael Quintana',    rank:'Master and Commander', admiraltyFavour:0 },
+    dixieF: { name:'Dixie',  faction:'French',  resources:695, officerName:'Étienne-Henri Valois',   rank:'Master and Commander', admiraltyFavour:0 },
+    dixieB: { name:'Dixie',  faction:'British', resources:814, officerName:'Jonathan Fairleigh',     rank:'Master and Commander', admiraltyFavour:0 },
+  },
   ships: {
     // British – Dixie
     bs1:  { player:'dixieB', faction:'British', name:'HMS Snake',        type:'18 Gun Brig',       cost:135, spCurrent:23, spMax:23, location:'Zone 6', squadron:'A', officer:'Jonathan Fairleigh', battlesWithoutStriking:2, crewLevel:'Regular',       repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
     bs2:  { player:'dixieB', faction:'British', name:'HMS Goldfinch',    type:'10 Gun Schooner',   cost:70,  spCurrent:13, spMax:13, location:'Zone 6', squadron:'A', officer:'', battlesWithoutStriking:2, crewLevel:'Regular',       repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    bs3:  { player:'dixieB', faction:'British', name:'HMS Vigilant',     type:'18 Gun Brig',       cost:108, spCurrent:23, spMax:23, location:'Zone 6', squadron:'A', officer:'', battlesWithoutStriking:1, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    bs4:  { player:'dixieB', faction:'British', name:'HMS Goldfinch',    type:'10 Gun Schooner',   cost:56,  spCurrent:13, spMax:13, location:'Zone 6', squadron:'A', officer:'', battlesWithoutStriking:1, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    bs5:  { player:'dixieB', faction:'British', name:'HMS Ranger',       type:'10 Gun Brig',       cost:56,  spCurrent:13, spMax:13, location:'Zone 5', squadron:'B', officer:'', battlesWithoutStriking:0, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    bs6:  { player:'dixieB', faction:'British', name:'HMS Otter',        type:'10 Gun Cutter',     cost:44,  spCurrent:13, spMax:13, location:'Zone 5', squadron:'B', officer:'', battlesWithoutStriking:0, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    bs7:  { player:'dixieB', faction:'British', name:'HMS Mercury',      type:'18 Gun Brig',       cost:80,  spCurrent:23, spMax:23, location:'Zone 5', squadron:'B', officer:'', battlesWithoutStriking:0, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    bs8:  { player:'dixieB', faction:'British', name:'HMS Victor',       type:'18 Gun Brig',       cost:108, spCurrent:23, spMax:23, location:'Zone 5', squadron:'B', officer:'', battlesWithoutStriking:0, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    bs9:  { player:'dixieB', faction:'British', name:'HMS Lapwing',      type:'10 Gun Schooner',   cost:70,  spCurrent:8,  spMax:13, location:'Zone 7', squadron:'', officer:'',  battlesWithoutStriking:1, crewLevel:'Regular',       repairPort:'', repairCostPaid:0, availableIn:'', notes:'Boarded and Captured El Vengador', status:'active' },
+    bs10: { player:'dixieB', faction:'British', name:'El Vengador',      type:'16 Gun Brig',       cost:72,  spCurrent:1,  spMax:20, location:'Gibraltar', squadron:'', officer:'', battlesWithoutStriking:0, crewLevel:'Inexperienced', repairPort:'Gibraltar', repairCostPaid:19, availableIn:'Turn 4', notes:'Purchased into Service', status:'repairing' },
+    // British – Ethan
+    be1:  { player:'ethan',  faction:'British', name:'HMS Arrow',        type:'10 Gun Schooner',   cost:70,  spCurrent:8,  spMax:13, location:'Zone 4', squadron:'A', officer:'Thomas Harrington', battlesWithoutStriking:3, crewLevel:'Regular',       repairPort:'', repairCostPaid:0, availableIn:'', notes:'Escorting Merchant Convoy', status:'active' },
+    be2:  { player:'ethan',  faction:'British', name:'HMS Ferret',       type:'10 Gun Cutter',     cost:44,  spCurrent:11, spMax:13, location:'Zone 4', squadron:'A', officer:'', battlesWithoutStriking:2, crewLevel:'Regular',       repairPort:'', repairCostPaid:0, availableIn:'', notes:'Escorting Merchant Convoy', status:'active' },
+    be3:  { player:'ethan',  faction:'British', name:'HMS Entreprenante',type:'10 Gun Cutter',     cost:48,  spCurrent:10, spMax:13, location:'Zone 4', squadron:'A', officer:'', battlesWithoutStriking:2, crewLevel:'Regular',       repairPort:'Damaged Rudder', repairCostPaid:0, availableIn:'', notes:'Escorting Merchant Convoy', status:'active' },
+    be4:  { player:'ethan',  faction:'British', name:'HMS Victor',       type:'18 Gun Brig',       cost:108, spCurrent:8,  spMax:23, location:'Zone 2', squadron:'B', officer:'', battlesWithoutStriking:2, crewLevel:'Regular',       repairPort:'', repairCostPaid:0, availableIn:'', notes:'Blew up Spanish powder transport', status:'active' },
+    be5:  { player:'ethan',  faction:'British', name:'HMS Ranger',       type:'10 Gun Brig',       cost:56,  spCurrent:5,  spMax:13, location:'Zone 2', squadron:'B', officer:'', battlesWithoutStriking:2, crewLevel:'Regular',       repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    be6:  { player:'ethan',  faction:'British', name:'HMS Lapwing',      type:'10 Gun Schooner',   cost:56,  spCurrent:7,  spMax:13, location:'Zone 2', squadron:'B', officer:'', battlesWithoutStriking:2, crewLevel:'Regular',       repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    be7:  { player:'ethan',  faction:'British', name:'HMS Sprightly',    type:'10 Gun Schooner',   cost:56,  spCurrent:2,  spMax:13, location:'Plymouth', squadron:'', officer:'', battlesWithoutStriking:1, crewLevel:'Inexperienced', repairPort:'Plymouth', repairCostPaid:21, availableIn:'Turn 4', notes:'', status:'repairing' },
+    // British lost
+    bl1:  { player:'ethan',  faction:'British', name:'HMS Badger',       type:'10 Gun Brig',       cost:56,  spCurrent:0,  spMax:13, location:'Zone 2', squadron:'B', officer:'', battlesWithoutStriking:0, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'Captured by Le Decide', status:'sunk' },
+    bl2:  { player:'ethan',  faction:'British', name:'HMS Pickle',       type:'10 Gun Schooner',   cost:48,  spCurrent:2,  spMax:13, location:'Zone 2', squadron:'B', officer:'', battlesWithoutStriking:0, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'Captured by Le Jupiter', status:'sunk' },
+    bl3:  { player:'ethan',  faction:'British', name:'HMS Vigilant',     type:'18 Gun Brig',       cost:108, spCurrent:23, spMax:23, location:'Zone 3', squadron:'A', officer:'', battlesWithoutStriking:1, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'Sunk by L\'Audacieux', status:'sunk' },
+    // French – Dixie
+    fd1:  { player:'dixieF', faction:'French', name:'Le Decide',         type:'18 Gun Brig',       cost:115, spCurrent:19, spMax:23, location:'Zone 2', squadron:'A', officer:'', battlesWithoutStriking:1, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'Captured HMS Badger', status:'active' },
+    fd2:  { player:'dixieF', faction:'French', name:'La Fouine',         type:'8 Gun Lugger',      cost:60,  spCurrent:10, spMax:10, location:'Zone 2', squadron:'A', officer:'', battlesWithoutStriking:3, crewLevel:'Regular',       repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    fd3:  { player:'dixieF', faction:'French', name:'Le Jupiter',        type:'8 Gun Lugger',      cost:60,  spCurrent:10, spMax:10, location:'Zone 2', squadron:'A', officer:'', battlesWithoutStriking:3, crewLevel:'Regular',       repairPort:'', repairCostPaid:0, availableIn:'', notes:'Captured HMS Pickle', status:'active' },
+    fd4:  { player:'dixieF', faction:'French', name:'La Sagesse',        type:'28 Gun 6th Rate',   cost:155, spCurrent:35, spMax:35, location:'Zone 2', squadron:'A', officer:'Étienne-Henri Valois', battlesWithoutStriking:3, crewLevel:'Regular', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    fd5:  { player:'dixieF', faction:'French', name:'L\'Audaciuex',      type:'16 Gun Brig',       cost:115, spCurrent:20, spMax:20, location:'Zone 3', squadron:'B', officer:'', battlesWithoutStriking:1, crewLevel:'Regular',       repairPort:'', repairCostPaid:0, availableIn:'', notes:'Sunk HMS Vigilant', status:'active' },
+    fd6:  { player:'dixieF', faction:'French', name:'Le Scoevola',       type:'10 Gun Brig',       cost:55,  spCurrent:13, spMax:13, location:'Zone 3', squadron:'B', officer:'', battlesWithoutStriking:1, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    fd7:  { player:'dixieF', faction:'French', name:'La Vive',           type:'8 Gun Lugger',      cost:48,  spCurrent:10, spMax:10, location:'Zone 3', squadron:'C', officer:'', battlesWithoutStriking:0, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    fd8:  { player:'dixieF', faction:'French', name:'Le Sirocco',        type:'8 Gun Lugger',      cost:48,  spCurrent:10, spMax:10, location:'Zone 3', squadron:'C', officer:'', battlesWithoutStriking:0, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    fd9:  { player:'dixieF', faction:'French', name:'Le Patriote',       type:'18 Gun Brig',       cost:92,  spCurrent:23, spMax:23, location:'Zone 3', squadron:'C', officer:'', battlesWithoutStriking:0, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    fd10: { player:'dixieF', faction:'French', name:'HMS Badger',        type:'10 Gun Brig',       cost:56,  spCurrent:2,  spMax:13, location:'Brest',  squadron:'', officer:'',  battlesWithoutStriking:0, crewLevel:'Inexperienced', repairPort:'Brest', repairCostPaid:11, availableIn:'Turn 4', notes:'Purchased into Service', status:'repairing' },
+    fd11: { player:'dixieF', faction:'French', name:'L\'Hirondelle',     type:'10 Gun Schooner',   cost:55,  spCurrent:13, spMax:13, location:'Brest',  squadron:'', officer:'',  battlesWithoutStriking:1, crewLevel:'Inexperienced', repairPort:'Brest', repairCostPaid:10, availableIn:'Turn 4', notes:'', status:'repairing' },
+    fd12: { player:'dixieF', faction:'French', name:'L\'Evielle',        type:'10 Gun Cutter',     cost:55,  spCurrent:13, spMax:13, location:'Rochefort', squadron:'', officer:'', battlesWithoutStriking:2, crewLevel:'Regular', repairPort:'Rochefort', repairCostPaid:7, availableIn:'Turn 5', notes:'', status:'repairing' },
+    fd13: { player:'dixieF', faction:'French', name:'Le Furieux',        type:'16 Gun Brig',       cost:88,  spCurrent:10, spMax:20, location:'Rochefort', squadron:'', officer:'', battlesWithoutStriking:1, crewLevel:'Inexperienced', repairPort:'Rochefort', repairCostPaid:10, availableIn:'Turn 4', notes:'', status:'repairing' },
+    // French lost
+    fl1:  { player:'dixieF', faction:'French', name:'L\'Alerte',         type:'10 Gun Schooner',   cost:56,  spCurrent:0,  spMax:13, location:'Zone 3', squadron:'B', officer:'', battlesWithoutStriking:1, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'Sunk after collision with Le Furieux', status:'sunk' },
+    fl2:  { player:'dixieF', faction:'French', name:'HMS Pickle',        type:'10 Gun Schooner',   cost:52,  spCurrent:2,  spMax:13, location:'Brest',  squadron:'', officer:'',  battlesWithoutStriking:0, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'Paid off as Prize Money (52)', status:'sunk' },
+    // Spanish – Cal
+    sc1:  { player:'cal', faction:'Spanish', name:'La Tormenta',         type:'26 Gun 6th Rate',   cost:120, spCurrent:33, spMax:33, location:'Zone 4', squadron:'C', officer:'', battlesWithoutStriking:1, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    sc2:  { player:'cal', faction:'Spanish', name:'Sin Lombre',          type:'18 Gun Brig',       cost:80,  spCurrent:23, spMax:23, location:'Zone 4', squadron:'C', officer:'', battlesWithoutStriking:1, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    sc3:  { player:'cal', faction:'Spanish', name:'La Bailar',           type:'18 Gun Brig',       cost:80,  spCurrent:23, spMax:23, location:'Zone 4', squadron:'C', officer:'', battlesWithoutStriking:1, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    sc4:  { player:'cal', faction:'Spanish', name:'(unnamed 6th Rate)',  type:'26 Gun 6th Rate',   cost:120, spCurrent:33, spMax:33, location:'Zone 6', squadron:'A', officer:'Don Rafael Quintana', battlesWithoutStriking:2, crewLevel:'Regular', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    sc5:  { player:'cal', faction:'Spanish', name:'San Carlos',          type:'18 Gun Brig',       cost:110, spCurrent:23, spMax:23, location:'Zone 6', squadron:'A', officer:'', battlesWithoutStriking:0, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    sc6:  { player:'cal', faction:'Spanish', name:'Cuervo',              type:'16 Gun Brig',       cost:90,  spCurrent:20, spMax:20, location:'Zone 6', squadron:'A', officer:'', battlesWithoutStriking:2, crewLevel:'Regular',       repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    sc7:  { player:'cal', faction:'Spanish', name:'La Valentia',         type:'16 Gun Brig',       cost:72,  spCurrent:17, spMax:20, location:'Zone 6', squadron:'A', officer:'', battlesWithoutStriking:1, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    sc8:  { player:'cal', faction:'Spanish', name:'La Serpiente',        type:'16 Gun Brig',       cost:72,  spCurrent:20, spMax:20, location:'Zone 6', squadron:'A', officer:'', battlesWithoutStriking:1, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    sc9:  { player:'cal', faction:'Spanish', name:'Limeno',              type:'16 Gun Brig',       cost:72,  spCurrent:20, spMax:20, location:'Zone 3', squadron:'B', officer:'', battlesWithoutStriking:0, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    sc10: { player:'cal', faction:'Spanish', name:'Peruano',             type:'16 Gun Brig',       cost:72,  spCurrent:20, spMax:20, location:'Zone 3', squadron:'B', officer:'', battlesWithoutStriking:0, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    sc11: { player:'cal', faction:'Spanish', name:'Resolucion',          type:'18 Gun Brig',       cost:80,  spCurrent:23, spMax:23, location:'Zone 3', squadron:'B', officer:'', battlesWithoutStriking:0, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    // Spanish lost
+    sl1:  { player:'cal', faction:'Spanish', name:'El Vengador',         type:'16 Gun Brig',       cost:72,  spCurrent:1,  spMax:20, location:'Zone 7', squadron:'A', officer:'', battlesWithoutStriking:1, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'Captured by HMS Lapwing', status:'sunk' },
+    // Merchant Convoy
+    mc1:  { player:'merchant', faction:'Merchant', name:'De Jonge Willem', type:'Whaler', cost:100, spCurrent:14, spMax:20, location:'Zone 3', squadron:'1', officer:'', battlesWithoutStriking:4, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    mc2:  { player:'merchant', faction:'Merchant', name:'Noordster',       type:'Whaler', cost:100, spCurrent:20, spMax:20, location:'Zone 3', squadron:'1', officer:'', battlesWithoutStriking:4, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
+    mc3:  { player:'merchant', faction:'Merchant', name:'De Zeeleeuw',     type:'Whaler', cost:100, spCurrent:18, spMax:20, location:'Zone 3', squadron:'1', officer:'', battlesWithoutStriking:4, crewLevel:'Inexperienced', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', status:'active' },
   },
   log: {}
 };
@@ -431,27 +421,6 @@ async function connect(cfg) {
 
 async function runMigrations() {
   try {
-    // v2: seed officer history entries for players who have officerName but no officers sub-collection
-    const v2Snap = await get(ref(db, '/migrations/v2_officer_history'));
-    if (!v2Snap.exists()) {
-      const playersSnap = await get(ref(db, '/players'));
-      if (playersSnap.exists()) {
-        const updates = {};
-        for (const [pid, p] of Object.entries(playersSnap.val())) {
-          if (p.officerName && !p.officers) {
-            updates[`players/${pid}/officers/o1`] = {
-              name: p.officerName, rank: p.rank || 'Master and Commander',
-              status: 'active', appointed: '',
-            };
-          }
-        }
-        updates['migrations/v2_officer_history'] = true;
-        await update(ref(db, '/'), updates);
-      } else {
-        await update(ref(db, '/'), { 'migrations/v2_officer_history': true });
-      }
-    }
-
     const migSnap = await get(ref(db, '/migrations/v1_capture_links'));
     if (migSnap.exists()) return;
     // Patch known capture/sunk relationships from initial data
@@ -552,9 +521,6 @@ function renderOverview() {
       <div class="favour">Admiralty Favour: <span class="favour-val ${favClass}">${favLabel}</span> · ${pShips} ships</div>
     </div>`;
   }
-  html += `<div class="player-card add-player-card" onclick="openAddPlayer()" style="display:flex;align-items:center;justify-content:center;cursor:pointer;border-style:dashed;color:var(--text-muted)">
-    <div style="text-align:center"><div style="font-size:1.5rem;margin-bottom:4px">+</div><div style="font-size:0.8rem">Add Player</div></div>
-  </div>`;
   html += `</div>`;
   // Summary per faction
   // Build a lookup: ship id → player faction, for resolving capturedBy
@@ -677,28 +643,6 @@ function renderPlayer(pid) {
   if (!pShips.length) html += `<div class="empty-state">No ships to show.</div>`;
 
   // Battle dispatches involving this player
-  // Officer history
-  const officers = p.officers || {};
-  const officerEntries = Object.entries(officers).sort(([,a],[,b]) => (a.appointed||'').localeCompare(b.appointed||''));
-  if (officerEntries.length) {
-    const FATE_COLOR = { active:'var(--green)', killed:'var(--red)', wounded:'var(--accent)', captured:'var(--accent2)', dismissed:'var(--text-muted)', retired:'var(--text-muted)', transferred:'var(--text-muted)' };
-    html += `<div class="section-label" style="margin-top:20px">Commanding Officers</div>
-    <div class="card" style="padding:12px 16px">`;
-    for (const [,o] of officerEntries) {
-      const isActive = o.status === 'active';
-      const fateColor = FATE_COLOR[o.status] || 'var(--text-muted)';
-      html += `<div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--border);font-size:0.85rem">
-        <span style="font-weight:${isActive?'bold':'normal'};color:${isActive?'var(--text)':'var(--text-muted)'}">
-          ${o.name} <span style="font-size:0.75rem;color:var(--text-muted)">${o.rank||''}</span>
-        </span>
-        <span style="font-size:0.78rem;color:${fateColor};text-transform:capitalize;margin-left:12px;flex-shrink:0">${isActive ? '&#x2693; In Command' : o.status}${o.notes ? ` — ${o.notes}` : ''}</span>
-      </div>`;
-    }
-    html += `<div style="margin-top:10px;text-align:right">
-      <button class="btn btn-sm btn-ghost" onclick="openChangeOfficer('${pid}')">Change Officer</button>
-    </div></div>`;
-  }
-
   const allLog = appData.log || {};
   const playerReports = Object.entries(allLog).filter(([,e]) =>
     e.reporter === pid || (e.opponents||[]).includes(pid)
@@ -811,43 +755,21 @@ function shipCard(id, s) {
     captureLines += `<div class="ship-notes" style="color:var(--green)">🏆 Captured: ${prizes.map(([,ps]) => ps.name).join(', ')}</div>`;
   }
 
-  // Game stat bar — all values computed from stored ship data + type helpers
-  const size  = _bSize(s.type);
-  const turn  = _bTurn(s.type);
-  const knots = _bStdSpeed(s.type) + (s.fastSailer ? 1 : 0);
-  const brk   = _bBreakVal(s.spMax || s.spCurrent || 0, s.type);
-  const broad = s.decks ? (_bBroadsides(s.decks, s.type).map(p=>p.dice+p.cat).join('-') || '—') : '—';
-  const bow   = s.bowChaser   || (s.decks ? _shipChaseStr(s.decks,'bow')   : '—');
-  const stern = s.sternChaser || (s.decks ? _shipChaseStr(s.decks,'stern') : '—');
-  const turnClass = `turn-${turn.toLowerCase()}`;
-  const statBar = `<div class="stat-bar">
-    <div class="stat-bar-cell"><div class="stat-bar-label">Size</div><div class="stat-bar-value">${size}</div></div>
-    <div class="stat-bar-cell"><div class="stat-bar-label">Broadsides</div><div class="stat-bar-value">${broad}</div></div>
-    <div class="stat-bar-cell"><div class="stat-bar-label">Stern</div><div class="stat-bar-value">${stern||'—'}</div></div>
-    <div class="stat-bar-cell"><div class="stat-bar-label">Bow</div><div class="stat-bar-value">${bow||'—'}</div></div>
-    <div class="stat-bar-cell"><div class="stat-bar-label">SP</div><div class="stat-bar-value"><div class="stat-bar-sp"><button class="sp-adj" onclick="event.stopPropagation();adjustShipSP('${id}',-1)">−</button><span id="sp-val-${id}">${s.spCurrent}</span><button class="sp-adj" onclick="event.stopPropagation();adjustShipSP('${id}',1)">+</button></div></div></div>
-    <div class="stat-bar-cell"><div class="stat-bar-label">Turn</div><div class="stat-bar-value ${turnClass}">${turn}</div></div>
-    <div class="stat-bar-cell"><div class="stat-bar-label">Knots</div><div class="stat-bar-value">${knots}</div></div>
-    <div class="stat-bar-cell"><div class="stat-bar-label">Break</div><div class="stat-bar-value">${brk}</div></div>
-  </div>`;
-
   return `<div class="ship-card ${s.status}" id="sc-${id}">
     <div class="ship-top">
       <div>
         <div class="ship-name">${s.name}</div>
-        <div class="ship-type">${s.decks ? s.decks.reduce((n,d)=>n+d.guns,0)+' Gun '+s.type : s.type}${s.officer ? ` · <em>${s.officer}</em>` : ''}</div>
+        <div class="ship-type">${s.type}${s.officer ? ` · <em>${s.officer}</em>` : ''}</div>
         ${s.squadron ? `<div class="squadron-label">Squadron ${s.squadron}</div>` : ''}
       </div>
       <div class="ship-actions">
         <button class="btn btn-sm btn-ghost" onclick="openEditShip('${id}')">Edit</button>
       </div>
     </div>
-    ${statBar}
     <div class="ship-meta">
+      <span class="tag sp ${spClass}">SP ${s.spCurrent}/${s.spMax}</span>
       <span class="tag ${crewClass}">${s.crewLevel} Crew</span>
       <span class="tag">${s.location}</span>
-      ${s.fastSailer ? `<span class="tag" style="color:var(--accent2)">⚡ Fast Sailer</span>` : ''}
-      ${s.swivels    ? `<span class="tag" style="color:var(--accent)">⚙ Swivel Guns</span>` : ''}
       ${s.battlesWithoutStriking > 0 ? `<span class="tag">${s.battlesWithoutStriking} battle${s.battlesWithoutStriking>1?'s':''}</span>` : ''}
       ${s.repairPort ? `<span class="tag" style="color:var(--accent2)">⚓ ${s.repairPort}</span>` : ''}
       ${s.availableIn ? `<span class="tag" style="color:var(--accent)">Avail. ${s.availableIn}</span>` : ''}
@@ -952,28 +874,7 @@ window.saveTurn = async function() {
 window.showPlayerModal = function(pid) {
   const p = (appData.players || {})[pid];
   if (!p) return;
-
-  // Build officer history section
-  const officers = p.officers || {};
-  const officerEntries = Object.entries(officers).sort(([,a],[,b]) => (a.appointed||'').localeCompare(b.appointed||''));
-  const FATE_COLOR = { active:'var(--green)', killed:'var(--red)', wounded:'var(--accent)', captured:'var(--accent2)', dismissed:'var(--text-muted)', retired:'var(--text-muted)', transferred:'var(--text-muted)' };
-  let officerHtml = '';
-  if (officerEntries.length) {
-    officerHtml = `<div style="margin-top:4px">`;
-    for (const [,o] of officerEntries) {
-      const isActive = o.status === 'active';
-      const fateColor = FATE_COLOR[o.status] || 'var(--text-muted)';
-      officerHtml += `<div style="display:flex;justify-content:space-between;align-items:baseline;padding:5px 0;border-bottom:1px solid var(--border);font-size:0.82rem">
-        <span style="font-weight:${isActive?'bold':'normal'};color:${isActive?'var(--text)':'var(--text-muted)'}">
-          ${o.name} <span style="font-size:0.72rem;color:var(--text-muted)">${o.rank||''}</span>
-        </span>
-        <span style="font-size:0.75rem;color:${fateColor};text-transform:capitalize;margin-left:8px">${o.status}${o.notes?` — ${o.notes}`:''}</span>
-      </div>`;
-    }
-    officerHtml += `</div>`;
-  }
-
-  showModal(`<button class="modal-close" onclick="closeModal()">&#x2715;</button>
+  showModal(`<button class="modal-close" onclick="closeModal()">×</button>
     <h2>${p.name} – ${p.faction}</h2>
     <div class="form-row"><label>Player Name</label><input id="pm-name" value="${p.name}"></div>
     <div class="form-row"><label>Officer Name</label><input id="pm-officer" value="${p.officerName||''}"></div>
@@ -993,10 +894,7 @@ window.showPlayerModal = function(pid) {
       </div>
       <input type="hidden" id="pm-favour" value="${p.admiraltyFavour}">
     </div>
-    ${officerEntries.length ? `<div class="form-row"><label>Officer History</label>${officerHtml}</div>` : ''}
-    <div class="modal-actions" style="flex-wrap:wrap;gap:8px">
-      <button class="btn btn-ghost" style="color:var(--red);border-color:var(--red);margin-right:auto" onclick="deletePlayer('${pid}')">Remove Player</button>
-      <button class="btn btn-ghost" onclick="openChangeOfficer('${pid}')">Change Officer</button>
+    <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
       <button class="btn" onclick="savePlayer('${pid}')">Save</button>
     </div>`);
@@ -1028,115 +926,6 @@ window.savePlayer = async function(pid) {
   closeModal(); showToast('Player updated');
 };
 
-// ─── ADD / REMOVE PLAYER ──────────────────────────────────────────────────────
-window.openAddPlayer = function() {
-  showModal(`<button class="modal-close" onclick="closeModal()">&#x2715;</button>
-    <h2>&#x2693; Add Player</h2>
-    <div class="form-row"><label>Player Name</label><input id="np-name" placeholder="e.g. James"></div>
-    <div class="form-row"><label>Faction</label>
-      <select id="np-faction">${FACTIONS.map(f=>`<option>${f}</option>`).join('')}</select>
-    </div>
-    <div class="form-row"><label>Officer Name</label><input id="np-officer" placeholder="e.g. Captain James Hargreaves"></div>
-    <div class="form-row"><label>Rank</label>
-      <select id="np-rank">${RANKS.map(r=>`<option>${r}</option>`).join('')}</select>
-    </div>
-    <div class="form-row"><label>Starting Resources</label><input type="number" id="np-res" value="500" style="width:100px"></div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-      <button class="btn" onclick="saveNewPlayer()">Add Player</button>
-    </div>`);
-};
-
-window.saveNewPlayer = async function() {
-  const name = document.getElementById('np-name').value.trim();
-  const officerName = document.getElementById('np-officer').value.trim();
-  if (!name) { showToast('Player name is required'); return; }
-  if (!officerName) { showToast('Officer name is required'); return; }
-  const faction = document.getElementById('np-faction').value;
-  const rank = document.getElementById('np-rank').value;
-  const resources = parseInt(document.getElementById('np-res').value)||500;
-  const pid = name.toLowerCase().replace(/\s+/g,'_') + '_' + Date.now().toString(36);
-  const playerData = { name, faction, officerName, rank, resources, admiraltyFavour: 0 };
-  // Seed initial officer log entry
-  const officerKey = 'o1';
-  playerData.officers = { [officerKey]: { name: officerName, rank, status: 'active', appointed: new Date().toISOString() } };
-  await set(ref(db, `/players/${pid}`), playerData);
-  closeModal(); showToast(`${name} added`);
-};
-
-window.deletePlayer = async function(pid) {
-  const p = (appData.players || {})[pid];
-  if (!p) return;
-  if (!confirm(`Remove ${p.name} from the campaign? This will not delete their ships.`)) return;
-  await set(ref(db, `/players/${pid}`), null);
-  // Return to overview
-  currentTab = 'overview';
-  render();
-  showToast(`${p.name} removed`);
-};
-
-// ─── OFFICER HISTORY ──────────────────────────────────────────────────────────
-window.openChangeOfficer = function(pid) {
-  const p = (appData.players || {})[pid];
-  if (!p) return;
-  const OFFICER_FATES = ['killed','wounded','captured','dismissed','retired','transferred'];
-  showModal(`<button class="modal-close" onclick="closeModal()">&#x2715;</button>
-    <h2>Change Officer – ${p.name}</h2>
-    <p style="font-size:0.85rem;color:var(--text-muted);margin-top:0">Record the fate of <strong>${p.officerName||'current officer'}</strong> and appoint a successor.</p>
-    <div class="form-row"><label>Fate of current officer</label>
-      <select id="co-fate">
-        ${OFFICER_FATES.map(f=>`<option value="${f}">${f.charAt(0).toUpperCase()+f.slice(1)}</option>`).join('')}
-      </select>
-    </div>
-    <div class="form-row"><label>Notes (optional)</label><input id="co-notes" placeholder="e.g. Lost at the Battle of Cape St. Vincent"></div>
-    <hr style="border-color:var(--border);margin:12px 0">
-    <div class="form-row"><label>New Officer Name</label><input id="co-newname" placeholder="e.g. Captain Henry Drake"></div>
-    <div class="form-row"><label>New Rank</label>
-      <select id="co-newrank">${RANKS.map(r=>`<option${p.rank===r?' selected':''}>${r}</option>`).join('')}</select>
-    </div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="showPlayerModal('${pid}')">Back</button>
-      <button class="btn" onclick="saveOfficerChange('${pid}')">Confirm Change</button>
-    </div>`);
-};
-
-window.saveOfficerChange = async function(pid) {
-  const p = (appData.players || {})[pid];
-  if (!p) return;
-  const newName = document.getElementById('co-newname').value.trim();
-  if (!newName) { showToast('New officer name is required'); return; }
-  const fate = document.getElementById('co-fate').value;
-  const notes = document.getElementById('co-notes').value.trim();
-  const newRank = document.getElementById('co-newrank').value;
-  const updates = {};
-  // Archive current officer — find the active one or create entry from legacy field
-  const officers = p.officers || {};
-  const activeKey = Object.keys(officers).find(k => officers[k].status === 'active');
-  if (activeKey) {
-    updates[`/players/${pid}/officers/${activeKey}/status`] = fate;
-    updates[`/players/${pid}/officers/${activeKey}/fate`] = fate;
-    if (notes) updates[`/players/${pid}/officers/${activeKey}/notes`] = notes;
-    updates[`/players/${pid}/officers/${activeKey}/relieved`] = new Date().toISOString();
-  } else if (p.officerName) {
-    // Legacy: create a history entry for the old officer
-    const legacyKey = 'o_legacy_' + Date.now().toString(36);
-    updates[`/players/${pid}/officers/${legacyKey}`] = {
-      name: p.officerName, rank: p.rank||'Master and Commander',
-      status: fate, fate, notes: notes||'', appointed: '', relieved: new Date().toISOString(),
-    };
-  }
-  // Create new active officer entry
-  const newKey = 'o_' + Date.now().toString(36);
-  updates[`/players/${pid}/officers/${newKey}`] = {
-    name: newName, rank: newRank, status: 'active', appointed: new Date().toISOString(),
-  };
-  // Update top-level fields for quick access
-  updates[`/players/${pid}/officerName`] = newName;
-  updates[`/players/${pid}/rank`] = newRank;
-  await update(ref(db, '/'), updates);
-  closeModal(); showToast('Officer change recorded');
-};
-
 // ─── SHIP MODALS ──────────────────────────────────────────────────────────────
 const ZONES = ['Zone 1','Zone 2','Zone 3','Zone 4','Zone 5','Zone 6','Zone 7','Plymouth','Cork','Brest','Lorient','La Rochelle','Rochefort','Bayonne','Santander','Ferrol','Coruña','Vigo','Lisbon','Cádiz','Gibraltar'];
 const STATUSES = ['active','repairing','sunk','captured','sold'];
@@ -1164,32 +953,12 @@ function shipFormHtml(s) {
   const repairPortOpts = ['', ...ports]
     .map(p => `<option value="${p}"${s.repairPort===p?' selected':''}>${p||'(none)'}</option>`).join('');
 
-  // Gun deck summary (read-only, from builder data)
-  const deckHtml = (s.decks && s.decks.length) ? `
-    <div class="form-row"><label>Gun Decks</label>
-      <table style="width:100%;border-collapse:collapse;font-size:0.8rem">
-        <thead><tr style="color:var(--text-muted);text-align:left">
-          <th style="padding:3px 6px;border-bottom:1px solid var(--border)">Deck</th>
-          <th style="padding:3px 6px;border-bottom:1px solid var(--border);text-align:center">Guns</th>
-          <th style="padding:3px 6px;border-bottom:1px solid var(--border);text-align:center">Caliber</th>
-          <th style="padding:3px 6px;border-bottom:1px solid var(--border)">Type</th>
-        </tr></thead>
-        <tbody>${s.decks.map(d=>`<tr>
-          <td style="padding:3px 6px">${d.name}</td>
-          <td style="padding:3px 6px;text-align:center">${d.guns}</td>
-          <td style="padding:3px 6px;text-align:center">${d.caliber}lb</td>
-          <td style="padding:3px 6px;color:var(--text-muted)">${d.type==='carronade'?'Carronade':'Long Gun'}</td>
-        </tr>`).join('')}</tbody>
-      </table>
-    </div>` : '';
-
   return `
     <div class="form-row"><label>Ship Name</label><input id="sf-name" value="${s.name||''}"></div>
     <div class="form-grid">
       <div class="form-row"><label>Type</label><select id="sf-type">${['', ...SHIP_TYPES].map(t=>`<option value="${t}"${s.type===t?' selected':''}>${t||'— select type —'}</option>`).join('')}</select></div>
       <div class="form-row"><label>Cost (resources)</label><input type="number" id="sf-cost" value="${s.cost||0}"></div>
     </div>
-    ${deckHtml}
     <div class="form-grid">
       <div class="form-row"><label>SP Current</label><input type="number" id="sf-spCurrent" value="${s.spCurrent||0}" min="0"></div>
       <div class="form-row"><label>SP Max</label><input type="number" id="sf-spMax" value="${s.spMax||0}" min="1"></div>
@@ -1261,13 +1030,6 @@ function readShipForm(existing) {
   };
 }
 
-window.adjustShipSP = async function(id, delta) {
-  const s = (appData.ships || {})[id];
-  if (!s) return;
-  const newVal = Math.max(0, Math.min(s.spMax, (s.spCurrent || 0) + delta));
-  await update(ref(db, `/ships/${id}`), { spCurrent: newVal });
-};
-
 window.openEditShip = function(id) {
   const s = (appData.ships || {})[id];
   if (!s) return;
@@ -1282,12 +1044,19 @@ window.openEditShip = function(id) {
 };
 
 // ─── SHIP BUILDER ─────────────────────────────────────────────────────────────
+const BUILDER_UPGRADES = [
+  { id:'sturdy',         name:'Sturdy',         cost:{XL:120,L:80,M:50,S:30,T:15}, excludes:[] },
+  { id:'over_gunned',    name:'Over Gunned',     cost:{XL:80,L:65,M:45,S:0,T:0},   excludes:['carronade_refit'], sizes:['XL','L','M'] },
+  { id:'master_gunner',  name:'Master Gunner',   cost:{XL:150,L:120,M:80,S:50,T:30},excludes:[] },
+  { id:'marines',        name:'Marines',         cost:{XL:60,L:45,M:30,S:20,T:10}, excludes:['privateer'] },
+  { id:'privateer',      name:'Privateer',       cost:{XL:0,L:40,M:30,S:20,T:10},  excludes:['marines'], sizes:['L','M','S','T'] },
+  { id:'carronade_refit',name:'Carronade Refit', cost:{XL:80,L:65,M:45,S:30,T:20}, excludes:['over_gunned'] },
+];
 const CALIBERS = [4,6,9,12,18,24,32,36,42];
 let _bldrDecks = [];
 let _bldrDeckId = 3;
-let _bldrPlayer = null, _bldrFaction = null;
+let _bldrPlayer = null, _bldrFaction = null, _bldrUpgrades = [];
 
-// ─── BUILDER HELPERS ──────────────────────────────────────────────────────────
 function _bSize(type) {
   const t = type.toLowerCase();
   if (t.includes('1st rate')||t.includes('2nd rate')) return 'XL';
@@ -1307,124 +1076,70 @@ function _bDice(guns) {
   return (guns>=10&&d===0)?1:d;
 }
 function _isChaseDeck(n) { const l=n.toLowerCase(); return l.includes('bow')||l.includes('stern')||l.includes('chase'); }
-
-// Max dice cap per ship type (reference: Black Seas rules)
-function _bMaxDice(type) {
-  const t = type.toLowerCase();
-  if (t.includes('1st rate')) return 15;
-  if (t.includes('2nd rate')) return 11;
-  if (t.includes('3rd rate')) return 8;
-  if (t.includes('razee')) return 7;
-  if (t.includes('4th rate')||t.includes('heavy frigate')) return 6;
-  if (t.includes('5th rate')) return 5;
-  if (t.includes('6th rate')) return 4;
-  if (t.includes('ship-sloop')||t.includes('brig-sloop')) return 4;
-  return 3;
-}
-
-// Standard speed baseline per ship type
-function _bStdSpeed(type) {
-  const t = type.toLowerCase();
-  if (t.includes('1st rate')||t.includes('2nd rate')) return 3;
-  if (t.includes('3rd rate')||t.includes('4th rate')) return 4;
-  if (t.includes('east indiaman')||t.includes('manila galleon')) return 3;
-  if (t.includes('merchantman')) return 4;
-  if (t.includes('cutter')||t.includes('schooner')||t.includes('felucca')) return 6;
-  return 5;
-}
-
-// Turn angle per ship type
-function _bTurn(type) {
-  const t = type.toLowerCase();
-  if (t.includes('galley')||t.includes('galiot')||t.includes('gunboat')||t.includes('tartane')) return 'Green';
-  if (t.includes('1st rate')||t.includes('2nd rate')||t.includes('merchantman')||t.includes('east indiaman')||t.includes('manila galleon')||t.includes('letter of marque')) return 'Yellow';
-  return 'Red';
-}
-
-// Break value from SP and type
-function _bBreakVal(sp, type) {
-  const t = type.toLowerCase();
-  if (t.includes('1st rate')||t.includes('2nd rate')||t.includes('3rd rate')) return Math.round(sp/3.5);
-  if (t.includes('4th rate')||t.includes('razee')||t.includes('heavy frigate')||t.includes('5th rate')) return Math.round(sp/4);
-  return Math.round(sp/4.5);
-}
-
-// Broadside dice from decks (excludes chasers), with dice cap applied
-function _bBroadsides(decks, type) {
+function _bBroadsides(decks) {
   const cats={H:0,M:0,L:0,HC:0,C:0,LC:0};
-  for (const d of decks) {
-    if (_isChaseDeck(d.name) || d.type==='swivel') continue;
-    cats[_bCat(d.caliber,d.type)] += d.guns;
-  }
   const vals={H:15,M:10,L:5,HC:20,C:15,LC:5};
-  let parts = [];
+  for (const d of decks) { if (_isChaseDeck(d.name)) continue; cats[_bCat(d.caliber,d.type)]+=d.guns; }
+  const parts=[];
   for (const [c,g] of Object.entries(cats)) {
     if (g>0) { const dice=_bDice(g); if(dice>0) parts.push({cat:c,dice,val:vals[c]}); }
   }
   parts.sort((a,b)=>b.val-a.val);
-  // Apply dice cap
-  if (type) {
-    const cap = _bMaxDice(type);
-    let total = parts.reduce((n,p)=>n+p.dice,0);
-    // Remove lightest first (already sorted heaviest-first, so remove from end)
-    for (let i=parts.length-1; i>=0 && total>cap; i--) {
-      const cut = Math.min(parts[i].dice, total-cap);
-      parts[i].dice -= cut; total -= cut;
-    }
-    parts = parts.filter(p=>p.dice>0);
-  }
   return parts;
 }
-
-// Parse a chaser string like "1H", "1LC" to its point value
-function _bChaserVal(str) {
-  if (!str || str==='-') return 0;
+function _bChasers(decks) {
   const vals={H:15,M:10,L:5,HC:20,C:15,LC:5};
-  const m = str.match(/(\d+)(HC|LC|H|M|C|L)/);
-  if (!m) return 0;
-  return parseInt(m[1]) * (vals[m[2]]||0);
+  let total=0;
+  const sides=['bow','stern'];
+  for (const side of sides) {
+    let guns=0,cal=9,t='long';
+    for (const d of decks) { if(d.name.toLowerCase().includes(side)){guns+=d.guns;cal=d.caliber;t=d.type;} }
+    if(guns>0){ const dice=Math.max(1,Math.round(guns/2/5)); total+=dice*(vals[_bCat(cal,t)]||5); }
+  }
+  return total;
 }
-
 function _round5(n) { return Math.round(n/5)*5; }
 
 function builderCalc() {
-  const guns       = parseInt(document.getElementById('bldr-guns').value)||0;
-  const type       = document.getElementById('bldr-type').value||'';
-  const crew       = document.getElementById('bldr-crew').value;
-  const fastSailer = document.getElementById('bldr-fastsailer').checked;
-  const swivels    = document.getElementById('bldr-swivels').checked;
-  const bowChaser  = document.getElementById('bldr-bowchaser').value;
-  const sternChaser= document.getElementById('bldr-sternchaser').value;
+  const guns        = parseInt(document.getElementById('bldr-guns').value)||0;
+  const type        = document.getElementById('bldr-type').value||'';
+  const crew        = document.getElementById('bldr-crew').value;
+  const fastSailer  = document.getElementById('bldr-fastsailer').checked;
+  const swivels     = document.getElementById('bldr-swivels').checked;
+  const size        = _bSize(type);
 
-  const sp    = Math.round(guns * 1.25);
-  const parts = _bBroadsides(_bldrDecks, type);
-  const stdSpd= _bStdSpeed(type);
-  const knots = stdSpd + (fastSailer ? 1 : 0);
-  const brk   = _bBreakVal(sp, type);
+  const sp = Math.round(guns*1.25);
+  const parts = _bBroadsides(_bldrDecks);
 
-  // Base cost: SP×4 + broadside value + chaser value + swivels
-  let base = sp * 4;
-  for (const p of parts) base += p.dice * p.val;
-  base += _bChaserVal(bowChaser) + _bChaserVal(sternChaser);
+  // Base cost: SP*4 + broadsides + chasers
+  let base = sp*4;
+  for (const p of parts) base += p.dice*p.val;
+  base += _bChasers(_bldrDecks);
+
+  // Swivel guns flat cost
   if (swivels) base += 15;
 
-  // Speed bonus: +12% of base per knot above standard
-  if (knots > stdSpd) base = base * (1 + (knots - stdSpd) * 0.12);
+  // Fast Sailer: +12% of base
+  if (fastSailer) base = Math.round(base * 1.12);
 
+  // Round to nearest 5
   base = _round5(base);
 
-  // Crew modifier (applied after rounding)
+  // Crew modifier
   const crewMod = {Inexperienced:-0.20,Regular:0,Veteran:0.20};
-  const cost = _round5(Math.round(base * (1 + (crewMod[crew]||0))));
+  let cost = Math.round(base*(1+(crewMod[crew]||0)));
+
+  // Upgrades (added after crew modifier)
+  for (const uid of _bldrUpgrades) {
+    const u = BUILDER_UPGRADES.find(x=>x.id===uid);
+    if (u) cost += (u.cost[size]||0);
+  }
 
   const broadStr = parts.length ? parts.map(p=>p.dice+p.cat).join('-') : '—';
   document.getElementById('prev-sp').textContent    = sp;
   document.getElementById('prev-broad').textContent = broadStr;
-  document.getElementById('prev-bow').textContent   = bowChaser === '-' ? '—' : bowChaser;
-  document.getElementById('prev-stern').textContent = sternChaser === '-' ? '—' : sternChaser;
-  document.getElementById('prev-knots').textContent = knots;
-  document.getElementById('prev-break').textContent = brk;
   document.getElementById('prev-cost').textContent  = cost;
+  _renderUpgrades(size);
 }
 
 function _renderDecks() {
@@ -1441,6 +1156,20 @@ function _renderDecks() {
     </div>`).join('');
 }
 
+function _renderUpgrades(size) {
+  document.getElementById('bldr-upgrades').innerHTML = BUILDER_UPGRADES.map(u => {
+    const allowed  = !u.sizes || u.sizes.includes(size);
+    const cost     = u.cost[size]||0;
+    const excluded = !_bldrUpgrades.includes(u.id) && u.excludes.some(id=>_bldrUpgrades.includes(id));
+    const checked  = _bldrUpgrades.includes(u.id);
+    const disabled = !allowed || excluded;
+    return `<label class="upgrade-item${disabled?' disabled':''}">
+      <input type="checkbox" ${checked?'checked':''} ${disabled?'disabled':''} onchange="builderToggleUpgrade('${u.id}',this.checked)">
+      <span>${u.name}</span><span style="color:var(--text-muted);font-size:0.72rem;margin-left:auto">+${cost}</span>
+    </label>`;
+  }).join('');
+}
+
 window.builderDeckUpdate = function(id, field, val) {
   const d = _bldrDecks.find(x=>x.id===id); if(d) d[field]=val; builderCalc();
 };
@@ -1453,13 +1182,18 @@ window.builderAddDeck = function() {
   _bldrDecks.push({id:_bldrDeckId++,name:'',guns:10,caliber:9,type:'long'});
   _renderDecks(); builderCalc();
 };
+window.builderToggleUpgrade = function(id, on) {
+  if (on) _bldrUpgrades.push(id);
+  else _bldrUpgrades = _bldrUpgrades.filter(x=>x!==id);
+  builderCalc();
+};
 window.closeBuilder  = function() { document.getElementById('builder-overlay').style.display='none'; };
 window.builderOverlayClick = function(e) { if(e.target===document.getElementById('builder-overlay')) closeBuilder(); };
 
 function openBuilder(playerId, faction) {
   _bldrPlayer = playerId; _bldrFaction = faction;
   _bldrDecks = [{id:1,name:'Main Deck',guns:26,caliber:18,type:'long'},{id:2,name:'QD/FC',guns:10,caliber:9,type:'long'}];
-  _bldrDeckId = 3;
+  _bldrDeckId = 3; _bldrUpgrades = [];
   const sel = document.getElementById('bldr-type');
   sel.innerHTML = SHIP_TYPES.map(t=>`<option>${t}</option>`).join('');
   sel.value = '5th Rate Frigate';
@@ -1468,33 +1202,28 @@ function openBuilder(playerId, faction) {
   document.getElementById('bldr-crew').value = 'Regular';
   document.getElementById('bldr-fastsailer').checked = false;
   document.getElementById('bldr-swivels').checked    = false;
-  document.getElementById('bldr-bowchaser').value    = '-';
-  document.getElementById('bldr-sternchaser').value  = '-';
   _renderDecks(); builderCalc();
   document.getElementById('builder-overlay').style.display = 'flex';
 }
 
 window.builderCreateShip = function() {
-  const sp         = parseInt(document.getElementById('prev-sp').textContent)||0;
-  const cost       = parseInt(document.getElementById('prev-cost').textContent)||0;
-  const name       = document.getElementById('bldr-name').value.trim();
-  const type       = document.getElementById('bldr-type').value;
-  const crew       = document.getElementById('bldr-crew').value;
-  const broad      = document.getElementById('prev-broad').textContent;
-  const fast       = document.getElementById('bldr-fastsailer').checked;
-  const swiv       = document.getElementById('bldr-swivels').checked;
-  const bowChaser  = document.getElementById('bldr-bowchaser').value;
-  const sternChaser= document.getElementById('bldr-sternchaser').value;
+  const sp    = parseInt(document.getElementById('prev-sp').textContent)||0;
+  const cost  = parseInt(document.getElementById('prev-cost').textContent)||0;
+  const name  = document.getElementById('bldr-name').value.trim();
+  const type  = document.getElementById('bldr-type').value;
+  const crew  = document.getElementById('bldr-crew').value;
+  const broad = document.getElementById('prev-broad').textContent;
+  const fast  = document.getElementById('bldr-fastsailer').checked;
+  const swiv  = document.getElementById('bldr-swivels').checked;
+  const upgStr = _bldrUpgrades.join(', ');
+  const noteParts = [`Broadsides: ${broad}`];
+  if (fast) noteParts.push('Fast Sailer');
+  if (swiv) noteParts.push('Swivel Guns');
+  if (upgStr) noteParts.push(upgStr);
   closeBuilder();
   const blank = { player:_bldrPlayer, faction:_bldrFaction, name, type, cost, spCurrent:sp, spMax:sp,
     location:'', squadron:'', crewLevel:crew, status:'active', battlesWithoutStriking:0,
-    officer:'', repairPort:'', repairCostPaid:0, availableIn:'',
-    fastSailer: fast || false,
-    swivels: swiv || false,
-    bowChaser: bowChaser !== '-' ? bowChaser : '',
-    sternChaser: sternChaser !== '-' ? sternChaser : '',
-    notes: '',
-    decks: JSON.parse(JSON.stringify(_bldrDecks)) };
+    officer:'', repairPort:'', repairCostPaid:0, availableIn:'', notes:noteParts.join(' · ') };
   showModal(`<button class="modal-close" onclick="closeModal()">&#x2715;</button>
     <h2>Add New Ship</h2>
     ${shipFormHtml(blank)}
@@ -1525,9 +1254,7 @@ window.saveShip = async function(id) {
 };
 
 window.addShip = async function(playerId, faction) {
-  // _bldrDecks is still populated from the builder (closeBuilder only hides the overlay)
-  const savedDecks = _bldrDecks && _bldrDecks.length ? JSON.parse(JSON.stringify(_bldrDecks)) : undefined;
-  const blank = { player: playerId, faction, name:'', type:'', cost:0, spCurrent:13, spMax:13, location:'Zone 1', squadron:'', crewLevel:'Inexperienced', status:'active', battlesWithoutStriking:0, officer:'', repairPort:'', repairCostPaid:0, availableIn:'', notes:'', decks: savedDecks };
+  const blank = { player: playerId, faction, name:'', type:'', cost:0, spCurrent:13, spMax:13, location:'Zone 1', squadron:'', crewLevel:'Inexperienced', status:'active', battlesWithoutStriking:0, officer:'', repairPort:'', repairCostPaid:0, availableIn:'', notes:'' };
   const data = readShipForm(blank);
   if (!data.name) { showToast('Ship needs a name'); return; }
   const newRef = push(ref(db, '/ships'));
