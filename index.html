@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Black Seas – Biscay & Iberian Station</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Pinyon+Script&family=Cinzel:wght@400;600&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg: #0d1b2a;
@@ -165,10 +167,65 @@
   /* Battle report cards */
   .report-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
   .report-meta { font-size: 0.75rem; color: var(--text-muted); line-height: 1.6; margin-top: 4px; }
-  .letter-box { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; font-size: 0.85rem; line-height: 1.8; white-space: pre-wrap; color: var(--text); font-style: italic; margin-top: 8px; }
-  .letter-collapsed { max-height: 80px; overflow: hidden; position: relative; }
-  .letter-collapsed::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 40px; background: linear-gradient(transparent, var(--surface2)); }
+  .letter-collapsed { max-height: 0; overflow: hidden; }
+  .letter-expanded { display: block; }
   .report-expand { background: none; border: none; color: var(--accent2); font-size: 0.78rem; cursor: pointer; padding: 4px 0; margin-top: 4px; font-family: var(--font); }
+  /* Parchment letter */
+  .letter-parchment {
+    background:
+      radial-gradient(ellipse at 12% 88%, rgba(139,90,43,0.18) 0%, transparent 45%),
+      radial-gradient(ellipse at 88% 12%, rgba(255,248,220,0.25) 0%, transparent 45%),
+      linear-gradient(160deg, #f5e8cc 0%, #ecdcaa 20%, #f3e2b8 45%, #e9d59f 70%, #f0dcaa 100%);
+    border: 1px solid #b8966a;
+    border-radius: 2px;
+    padding: 36px 44px 40px;
+    font-family: 'IM Fell English', Georgia, serif;
+    font-size: 0.92rem;
+    line-height: 1.9;
+    color: #1c0f06;
+    position: relative;
+    box-shadow: inset 0 0 50px rgba(100,60,20,0.12), 0 6px 24px rgba(0,0,0,0.45);
+    margin-top: 12px;
+  }
+  .letter-parchment::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 2px;
+    background:
+      repeating-linear-gradient(0deg, transparent, transparent 28px, rgba(139,90,43,0.04) 28px, rgba(139,90,43,0.04) 29px);
+    pointer-events: none;
+  }
+  .letter-body { font-style: italic; }
+  .letter-body p { margin: 0 0 0.6em; text-indent: 2.2em; }
+  .letter-body p:first-child { text-indent: 0; }
+  .letter-sig-block {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-top: 1.8em;
+    gap: 16px;
+  }
+  .letter-sig-left { flex: 0 0 auto; }
+  .letter-sig-right { text-align: right; }
+  .letter-sig-name {
+    font-family: 'Pinyon Script', cursive;
+    font-size: 2.4rem;
+    line-height: 1;
+    color: #140a02;
+    display: block;
+  }
+  .letter-sig-underline {
+    border-bottom: 1px solid rgba(30,15,5,0.35);
+    width: 180px;
+    margin: 2px 0 6px auto;
+  }
+  .letter-sig-rank {
+    font-size: 0.78rem;
+    font-style: italic;
+    color: #3a2010;
+    line-height: 1.5;
+  }
   .player-check-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 6px; }
   .player-check { display: flex; align-items: center; gap: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 6px 10px; font-size: 0.85rem; cursor: pointer; }
   .player-check input[type=checkbox] { accent-color: var(--accent); width: 14px; height: 14px; flex-shrink: 0; }
@@ -862,29 +919,207 @@ function renderMerchant() {
   return html;
 }
 
+// ─── OFFICER IMAGE HELPERS ────────────────────────────────────────────────────
+function _resizeImageToDataUrl(dataUrl, w, h) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, w, h);
+      const scale = Math.min(w / img.width, h / img.height);
+      const sw = img.width * scale, sh = img.height * scale;
+      ctx.drawImage(img, (w - sw) / 2, (h - sh) / 2, sw, sh);
+      resolve(c.toDataURL('image/jpeg', 0.82));
+    };
+    img.src = dataUrl;
+  });
+}
+
+window.uploadOfficerImage = function(type, pid) {
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = 'image/*';
+  input.onchange = async () => {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const [w, h] = type === 'seal' ? [220, 220] : [400, 130];
+      const resized = await _resizeImageToDataUrl(ev.target.result, w, h);
+      const field = type === 'seal' ? 'sealUrl' : 'signatureUrl';
+      await update(cref(`/players/${pid}`), { [field]: resized });
+      showToast(type === 'seal' ? 'Seal uploaded' : 'Signature uploaded');
+      _refreshOfficerPreview(type, pid, resized);
+    };
+    reader.readAsDataURL(file);
+  };
+  input.click();
+};
+
+window.generateOfficerImage = async function(type, pid) {
+  const apiKey = localStorage.getItem('bs_openai_key');
+  if (!apiKey) { showToast('Add your OpenAI API key in Campaign Management first'); return; }
+  const p = (appData.players || {})[pid];
+  if (!p) return;
+  const officerName = p.officerName || p.name || 'Unknown Officer';
+  const faction = p.faction || 'British';
+  const waxDesc = { British: 'deep crimson red wax', French: 'dark navy blue wax', Spanish: 'aged dark gold wax' }[faction] || 'dark brown wax';
+
+  const prompt = type === 'seal'
+    ? `A period-accurate 18th century naval wax seal, circular, viewed directly from above. ${waxDesc}, ornate design featuring a naval anchor, crown, and decorative rope border. Realistic cracked wax texture with natural imperfections. Isolated on a plain white background. Photorealistic, top-down view, no shadows on background.`
+    : `An ornate 18th century handwritten cursive signature reading exactly "${officerName}". Written with a quill pen in dark sepia-brown ink. Extremely florid and elaborate calligraphy in the style of Napoleonic-era naval correspondence, with long flourishing descenders and ascenders. Isolated on a plain white background. No other text, no lines, no paper texture.`;
+
+  const btnId = `gen-btn-${type}-${pid}`;
+  const btn = document.getElementById(btnId);
+  if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
+
+  try {
+    const resp = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: 'dall-e-3',
+        prompt,
+        n: 1,
+        size: type === 'seal' ? '1024x1024' : '1792x1024',
+        response_format: 'b64_json',
+      }),
+    });
+    if (!resp.ok) { const e = await resp.json(); throw new Error(e.error?.message || resp.statusText); }
+    const data = await resp.json();
+    const rawUrl = `data:image/png;base64,${data.data[0].b64_json}`;
+    const [w, h] = type === 'seal' ? [220, 220] : [400, 130];
+    const resized = await _resizeImageToDataUrl(rawUrl, w, h);
+    const field = type === 'seal' ? 'sealUrl' : 'signatureUrl';
+    await update(cref(`/players/${pid}`), { [field]: resized });
+    showToast(type === 'seal' ? 'Seal generated!' : 'Signature generated!');
+    _refreshOfficerPreview(type, pid, resized);
+  } catch(err) {
+    showToast(`Generation failed: ${err.message}`);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'AI Generate'; }
+  }
+};
+
+function _refreshOfficerPreview(type, pid, dataUrl) {
+  const emptyEl = document.getElementById(`officer-${type}-empty-${pid}`);
+  if (emptyEl) emptyEl.style.display = 'none';
+  let previewEl = document.getElementById(`officer-${type}-preview-${pid}`);
+  if (!previewEl) {
+    previewEl = document.createElement('img');
+    previewEl.id = `officer-${type}-preview-${pid}`;
+    if (type === 'seal') previewEl.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:50%';
+    else previewEl.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain';
+    if (emptyEl) emptyEl.parentNode.appendChild(previewEl);
+  }
+  previewEl.src = dataUrl;
+}
+
 // ─── BATTLE REPORT HELPERS ────────────────────────────────────────────────────
+function _generateSeal(officerName, faction) {
+  const cfg = {
+    British: { wax: '#7a1212', mid: '#a01a1a', rim: '#4a0a0a' },
+    French:  { wax: '#0f2560', mid: '#1a3a8a', rim: '#091840' },
+    Spanish: { wax: '#7a5c08', mid: '#a07c10', rim: '#4a3804' },
+  }[faction] || { wax: '#4a2010', mid: '#6a3418', rim: '#2a1008' };
+
+  const initials = (officerName || '?').split(/[\s\-]+/).map(w => w[0]).filter(Boolean).join('').toUpperCase().slice(0, 3);
+  const uid = initials + faction;
+
+  const anchorPath = `M45,22 L45,58 M33,50 Q28,58 35,62 M57,50 Q62,58 55,62 M34,28 Q45,24 56,28`;
+  const ringPath = `M45,18 m-26,0 a26,26 0 1,0 52,0 a26,26 0 1,0 -52,0`;
+
+  // Scallop outer ring: 16 bumps
+  let scallops = '';
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    const x = 45 + 41 * Math.cos(a);
+    const y = 45 + 41 * Math.sin(a);
+    scallops += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="${cfg.rim}"/>`;
+  }
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="88" height="88" viewBox="0 0 90 90">
+    <defs>
+      <radialGradient id="wg-${uid}" cx="38%" cy="35%" r="62%">
+        <stop offset="0%" stop-color="${cfg.mid}"/>
+        <stop offset="55%" stop-color="${cfg.wax}"/>
+        <stop offset="100%" stop-color="${cfg.rim}"/>
+      </radialGradient>
+      <filter id="wf-${uid}" x="-10%" y="-10%" width="120%" height="120%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" result="noise"/>
+        <feDisplacementMap in="SourceGraphic" in2="noise" scale="2.5" xChannelSelector="R" yChannelSelector="G"/>
+      </filter>
+    </defs>
+    ${scallops}
+    <circle cx="45" cy="45" r="37" fill="url(#wg-${uid})" filter="url(#wf-${uid})"/>
+    <circle cx="45" cy="45" r="37" fill="none" stroke="${cfg.rim}" stroke-width="1.5"/>
+    <ellipse cx="36" cy="34" rx="9" ry="5" fill="white" opacity="0.12" transform="rotate(-30 36 34)"/>
+    <path d="${anchorPath}" stroke="rgba(255,255,255,0.6)" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="45" cy="22" r="4.5" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="2.2"/>
+    <circle cx="45" cy="45" r="23" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="1"/>
+    <text font-size="7.5" font-family="Cinzel,serif" letter-spacing="2" fill="rgba(255,255,255,0.62)" text-anchor="middle">
+      <textPath href="#ring-${uid}" startOffset="50%">${initials}</textPath>
+    </text>
+    <path id="ring-${uid}" d="M22,45 a23,23 0 1,1 46,0" fill="none"/>
+  </svg>`;
+}
+
 function _reportCardHtml(id, e) {
   const players = appData.players || {};
   const rp = players[e.reporter] || {};
   const opponents = (e.opponents || []).map(oid => {
     const p = players[oid];
-    return p ? `${FACTION_FLAG[p.faction]||''} ${p.officerName}` : oid;
+    return p ? `${FACTION_FLAG[p.faction]||''} ${p.officerName||oid}` : oid;
   }).join(', ');
   const repTag = `${FACTION_FLAG[rp.faction]||''} ${rp.officerName||e.reporter||'Unknown'}`;
   const sqNote = e.squadron ? ` · Sqn ${e.squadron}` : '';
   const date = e.gameDate
     ? new Date(e.gameDate).toLocaleDateString('en-GB',{day:'numeric',month:'long'})
-    : (e.timestamp ? new Date(e.timestamp).toLocaleDateString('en-GB',{day:'numeric',month:'short'}) : '');
-  const content = (e.letter || e.text || '(no content)').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    : (e.timestamp ? new Date(e.timestamp).toLocaleDateString('en-GB',{day:'numeric',month:'long'}) : '');
+
+  const rawText = (e.letter || e.text || '(no content)');
+  const paragraphs = rawText.split(/\n{2,}|\n/).filter(l => l.trim()).map(l => {
+    const safe = l.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return `<p>${safe}</p>`;
+  }).join('');
+
+  const officerName = rp.officerName || e.reporter || 'Unknown';
+  const rank = rp.rank || '';
+  const allShips = appData.ships || {};
+  const flagship = Object.values(allShips).find(s => s.player === e.reporter && s.status === 'active') || null;
+  const shipName = flagship ? flagship.name : '';
+  const sealHtml = rp.sealUrl
+    ? `<img src="${rp.sealUrl}" style="width:88px;height:88px;object-fit:cover;border-radius:50%;display:block">`
+    : _generateSeal(officerName, rp.faction || '');
+
+  const sigHtml = rp.signatureUrl
+    ? `<img src="${rp.signatureUrl}" style="max-width:220px;max-height:80px;object-fit:contain;display:block;margin-left:auto">`
+    : `<span class="letter-sig-name">${officerName}</span>`;
+
+  const letter = `<div class="letter-parchment">
+    <div style="text-align:right;font-family:'IM Fell English',serif;font-size:0.8rem;font-style:italic;color:#3a2010;margin-bottom:1.4em">${date}</div>
+    <div class="letter-body">${paragraphs}</div>
+    <div class="letter-sig-block">
+      <div class="letter-sig-left">${sealHtml}</div>
+      <div class="letter-sig-right">
+        ${sigHtml}
+        <div class="letter-sig-underline"></div>
+        <div class="letter-sig-rank">${rank}${shipName ? '<br>'+shipName : ''}</div>
+      </div>
+    </div>
+  </div>`;
+
   return `<div class="report-card">
     <div style="display:flex;justify-content:space-between;align-items:flex-start">
       <div>
-        <div style="font-size:0.9rem;font-weight:bold;color:var(--accent)">Turn ${e.turn||'?'}, Phase ${e.phase||1} — Dispatch</div>
-        <div class="report-meta">${repTag}${sqNote}${opponents ? ' vs ' + opponents : ''}${date ? ' · ' + date : ''}</div>
+        <div style="font-size:0.9rem;font-weight:bold;color:var(--accent)">${repTag}${sqNote}${opponents ? ' vs ' + opponents : ''}</div>
+        ${date ? `<div class="report-meta">${date}</div>` : ''}
       </div>
       <button class="btn btn-ghost btn-sm" style="color:var(--red);border-color:var(--red);flex-shrink:0;margin-left:8px" onclick="deleteDispatch('${id}')">Delete</button>
     </div>
-    <div class="letter-box letter-collapsed" id="letter-${id}">${content}</div>
+    <div class="letter-collapsed" id="letter-${id}">${letter}</div>
     <button class="report-expand" id="ltoggle-${id}" onclick="toggleLetter('${id}')">Read full dispatch ▾</button>
   </div>`;
 }
@@ -1142,10 +1377,23 @@ window.openCampaignModal = function() {
       <button class="btn btn-sm" onclick="campaignCreate()">Create</button>
     </div>
 
+    <div class="section-label" style="margin-top:20px">OpenAI (Image Generation)</div>
+    <p style="font-size:0.8rem;color:var(--text-muted);margin:0 0 8px">Used to generate officer seals &amp; signatures via DALL·E 3. Key is stored in this browser only and never sent anywhere except OpenAI.</p>
+    <div style="display:flex;gap:8px">
+      <input id="cm-openai" type="password" placeholder="sk-…" value="${localStorage.getItem('bs_openai_key')||''}" style="flex:1;font-family:monospace">
+      <button class="btn btn-sm" onclick="saveOpenAiKey()">Save Key</button>
+    </div>
+
     <div class="section-label" style="margin-top:20px;color:var(--red)">Reset This Campaign</div>
     <p style="font-size:0.82rem;color:var(--text-muted);margin:4px 0 10px">Wipe all players, ships, and dispatches for <strong>${campaignId}</strong>.</p>
     <button class="btn btn-danger" onclick="campaignNew()">Reset Campaign</button>
   `);
+};
+
+window.saveOpenAiKey = function() {
+  const key = document.getElementById('cm-openai').value.trim();
+  if (key) { localStorage.setItem('bs_openai_key', key); showToast('OpenAI key saved'); }
+  else { localStorage.removeItem('bs_openai_key'); showToast('OpenAI key cleared'); }
 };
 
 window.campaignSwitch = function() {
@@ -1212,6 +1460,34 @@ window.showPlayerModal = function(pid) {
       </div>
       <input type="hidden" id="pm-favour" value="${p.admiraltyFavour}">
     </div>
+    <div class="section-label" style="margin-top:20px">Officer Seal &amp; Signature</div>
+    <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+      <div>
+        <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:6px">Wax Seal</div>
+        <div style="width:90px;height:90px;border:1px dashed var(--border);border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;background:var(--surface2)">
+          ${p.sealUrl
+            ? `<img id="officer-seal-preview-${pid}" src="${p.sealUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
+            : `<span id="officer-seal-empty-${pid}" style="font-size:0.7rem;color:var(--text-muted);text-align:center;padding:6px">No seal</span>`}
+        </div>
+        <div style="display:flex;gap:4px;margin-top:8px;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="uploadOfficerImage('seal','${pid}')">Upload</button>
+          <button class="btn btn-ghost btn-sm" id="gen-btn-seal-${pid}" onclick="generateOfficerImage('seal','${pid}')">AI Generate</button>
+        </div>
+      </div>
+      <div style="flex:1;min-width:200px">
+        <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:6px">Signature</div>
+        <div style="width:100%;height:90px;border:1px dashed var(--border);border-radius:4px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:var(--surface2)">
+          ${p.signatureUrl
+            ? `<img id="officer-signature-preview-${pid}" src="${p.signatureUrl}" style="max-width:100%;max-height:100%;object-fit:contain">`
+            : `<span id="officer-signature-empty-${pid}" style="font-size:0.7rem;color:var(--text-muted)">No signature</span>`}
+        </div>
+        <div style="display:flex;gap:4px;margin-top:8px">
+          <button class="btn btn-ghost btn-sm" onclick="uploadOfficerImage('signature','${pid}')">Upload</button>
+          <button class="btn btn-ghost btn-sm" id="gen-btn-signature-${pid}" onclick="generateOfficerImage('signature','${pid}')">AI Generate</button>
+        </div>
+      </div>
+    </div>
+
     <div class="modal-actions">
       <button class="btn btn-danger" onclick="deletePlayer('${pid}')" style="margin-right:auto">Delete Player</button>
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
