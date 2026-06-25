@@ -1868,7 +1868,7 @@ window.recalcRepairCost = function() {
       const shipData = (appData.ships || {})[shipId] || {};
       const used = shipData.juryRigTurn === currentTurn;
       const btnHtml = shipId
-        ? `<br><button class="btn btn-sm" style="margin-top:6px;${used ? 'opacity:0.45;cursor:not-allowed' : 'color:var(--surface1);background:var(--accent2)'}"
+        ? `<br><button class="btn btn-sm" style="margin-top:6px;${used ? 'opacity:0.45;cursor:not-allowed' : ''}"
             ${used ? 'disabled' : `onclick="juryRigRepair('${shipId}')"`}>
             ⚓ D3 Jury Rig Repair${used ? ' (used this turn)' : ''}
            </button>`
@@ -2218,6 +2218,11 @@ window.saveNewShip = async function() {
 window.saveShip = async function(id) {
   const existing = (appData.ships || {})[id];
   const data = readShipForm(existing);
+
+  // Log previous name if renamed
+  if (data.name && data.name !== existing.name) {
+    data.previousName = existing.name;
+  }
 
   // Transfer to new player
   if (data.player !== existing.player) {
