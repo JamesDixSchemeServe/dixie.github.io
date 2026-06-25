@@ -622,9 +622,25 @@ function rebuildNav() {
 function renderOverview() {
   const players = appData.players || {};
   const ships = appData.ships || {};
+  const turn = appData.meta.turn || 1;
+  const phase = appData.meta.phase || 1;
   let html = `<div class="card"><div class="card-title">Campaign Status</div>
-    <div class="stat-row"><span class="stat-label">Game Turn</span><span class="stat-value">${appData.meta.turn}</span></div>
-    <div class="stat-row"><span class="stat-label">Phase</span><span class="stat-value">${phaseLabel(appData.meta.phase)}</span></div>
+    <div class="stat-row" style="align-items:center">
+      <span class="stat-label">Turn</span>
+      <span class="stat-value" style="display:flex;align-items:center;gap:8px">
+        <button class="res-adj" onclick="adjustTurn(-1)" title="Previous turn">−</button>
+        <strong style="font-size:1.15rem;color:var(--accent);min-width:24px;text-align:center">${turn}</strong>
+        <button class="res-adj" onclick="confirmAdvanceTurn()" title="Advance turn">+</button>
+      </span>
+    </div>
+    <div class="stat-row" style="align-items:center">
+      <span class="stat-label">Phase</span>
+      <span class="stat-value" style="display:flex;align-items:center;gap:8px">
+        <button class="res-adj" onclick="adjustPhase(-1)" title="Previous phase">−</button>
+        <strong style="min-width:24px;text-align:center">${phaseLabel(phase)}</strong>
+        <button class="res-adj" onclick="adjustPhase(1)" title="Next phase">+</button>
+      </span>
+    </div>
   </div>`;
   html += `<div class="player-row">`;
   for (const [pid, p] of Object.entries(players)) {
@@ -1505,7 +1521,7 @@ window.mapGroupClick = function(encodedKey) {
     ${escortLine}
     ${!isMerchant && p.officerName ? `<div class="stat-row"><span class="stat-label">Officer</span><span class="stat-value">${p.officerName}</span></div>` : ''}
     ${officers.length ? `<div class="stat-row"><span class="stat-label">Ship Officers</span><span class="stat-value">${officers.join(', ')}</span></div>` : ''}
-    <div class="section-label" style="margin-top:14px">Merchants (${groupShips.length})</div>
+    <div class="section-label" style="margin-top:14px">${isMerchant ? 'Merchants' : 'Ships'} (${groupShips.length})</div>
     ${merchantRows}
     ${escortRows}
     <div style="margin-top:14px;display:flex;justify-content:flex-end;gap:8px">
@@ -1999,80 +2015,56 @@ window.setFilter = function(f) {
 
 // ─── TURN MODAL ───────────────────────────────────────────────────────────────
 window.openCampaignModal = function() {
-  const meta = appData.meta || {};
+  const meta    = appData.meta    || {};
+  const players = appData.players || {};
+  const ships   = appData.ships   || {};
+  const turn    = meta.turn  || 1;
+  const phase   = meta.phase || 1;
+
+  const moveDone = meta.movementDone || {};
+  const milPlayers = Object.entries(players).filter(([,p]) => p.faction && !MERCHANT_FACTIONS.includes(p.faction) && p.faction !== 'Merchant');
+  const allConfirmed = milPlayers.length > 0 && milPlayers.every(([pid]) => moveDone[pid]);
+  const movementStatusLines = milPlayers.map(([pid, p]) =>
+    `<div style="font-size:0.8rem;margin:2px 0">${FACTION_FLAG[p.faction]||''} ${p.name}: ${moveDone[pid] ? '<span style="color:var(--green)">✓ Confirmed</span>' : '<span style="color:var(--text-muted)">Pending…</span>'}</div>`
+  ).join('');
+
   showModal(`<button class="modal-close" onclick="closeModal()">×</button>
     <h2>⚙ Campaign Management</h2>
 
-    <div class="section-label">Active Campaign</div>
-    <p style="font-size:0.8rem;color:var(--text-muted);margin:0 0 8px">Share this link with your players — anyone who opens it will see the same live campaign.</p>
-    <div style="display:flex;gap:8px;margin-bottom:12px">
+    <div class="section-label">Movement &amp; Interception</div>
+    ${movementStatusLines}
+    <div style="margin-top:6px;font-size:0.75rem;color:${allConfirmed?'var(--green)':'var(--text-muted)'}">
+      ${allConfirmed ? '✓ Movement confirmed — Interception tab is unlocked' : 'Interception tab unlocks when all players confirm movement'}
+    </div>
+
+    <div class="section-label" style="margin-top:20px">Campaign History</div>
+    <p style="font-size:0.82rem;color:var(--text-muted);margin:4px 0 8px">Turn-by-turn summary of dispatches, repairs, interception results and GM notes.</p>
+    <button class="btn btn-sm" onclick="openHistory()">📜 View History</button>
+
+    <div class="section-label" style="margin-top:20px">Active Campaign Link</div>
+    <p style="font-size:0.8rem;color:var(--text-muted);margin:0 0 8px">Share this link — anyone who opens it sees the same live campaign.</p>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
       <input id="cm-shareurl" readonly value="${location.origin + location.pathname}#${campaignId}" style="flex:1;font-size:0.8rem;color:var(--text-muted);cursor:text">
       <button class="btn btn-sm" onclick="copyCampaignUrl()">Copy</button>
     </div>
-    <div style="display:flex;gap:8px">
-      <input id="cm-switch" placeholder="Switch to another campaign ID" style="flex:1">
-      <button class="btn btn-sm" onclick="campaignSwitch()">Switch</button>
-    </div>
-
-    <div class="section-label" style="margin-top:20px">Turn &amp; Phase</div>
-    <div class="form-grid">
-      <div class="form-row"><label>Game Turn</label><input type="number" id="m-turn" value="${meta.turn||1}" min="1"></div>
-      <div class="form-row"><label>Phase (1–3)</label><input type="number" id="m-phase" value="${meta.phase||1}" min="1" max="3"></div>
-    </div>
-    <div style="margin-top:8px">
-      <button class="btn" onclick="saveTurn()">Save Turn &amp; Phase</button>
-    </div>
-
-    <div class="section-label" style="margin-top:20px">Add Player</div>
-    <div class="form-grid">
-      <div class="form-row"><label>Player Name</label><input id="cp-name" placeholder="e.g. James"></div>
-      <div class="form-row"><label>Faction</label><select id="cp-faction">
-        <optgroup label="Naval Powers">${FACTIONS.map(f=>`<option>${f}</option>`).join('')}</optgroup>
-        <optgroup label="Merchant Nations">${MERCHANT_FACTIONS.map(f=>`<option>${f}</option>`).join('')}</optgroup>
-      </select></div>
-    </div>
-    <div class="form-grid">
-      <div class="form-row"><label>Officer Name</label><input id="cp-officer" placeholder="e.g. Capt. Smith (optional)"></div>
-      <div class="form-row"><label>Starting Resources</label><input type="number" id="cp-resources" value="500" min="0"></div>
-    </div>
-    <div style="margin-top:8px">
-      <button class="btn" onclick="campaignAddPlayer()">Add Player</button>
-    </div>
 
     <div class="section-label" style="margin-top:20px">New Campaign</div>
-    <p style="font-size:0.82rem;color:var(--text-muted);margin:4px 0 8px">Create a blank campaign under a new ID. Share the new URL with your group.</p>
-    <div style="display:flex;gap:8px">
+    <p style="font-size:0.82rem;color:var(--text-muted);margin:4px 0 8px">Create a blank campaign under a new ID.</p>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
       <input id="cm-new" placeholder="e.g. mediterranean-1812" style="flex:1">
       <button class="btn btn-sm" onclick="campaignCreate()">Create</button>
     </div>
 
-    <div class="section-label" style="margin-top:20px">Clone From Another Campaign</div>
-    <p style="font-size:0.82rem;color:var(--text-muted);margin:4px 0 8px">Copy all data from another campaign into <strong>${campaignId}</strong>. This will overwrite any existing data here.</p>
-    <div style="display:flex;gap:8px">
+    <div class="section-label" style="margin-top:12px">Clone From Another Campaign</div>
+    <p style="font-size:0.82rem;color:var(--text-muted);margin:4px 0 8px">Copy all data from another campaign into <strong>${campaignId}</strong>.</p>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
       <input id="cm-clone-src" placeholder="Source campaign ID (e.g. default)" style="flex:1">
       <button class="btn btn-sm" onclick="campaignClone()">Clone</button>
     </div>
 
-    <div class="section-label" style="margin-top:20px">Movement &amp; Interception</div>
-    ${(() => {
-      const players = appData.players || {};
-      const moveDone = (appData.meta || {}).movementDone || {};
-      const milPlayers = Object.entries(players).filter(([,p]) => p.faction && !MERCHANT_FACTIONS.includes(p.faction) && p.faction !== 'Merchant');
-      const allConfirmed = milPlayers.length > 0 && milPlayers.every(([pid]) => moveDone[pid]);
-      const statusLines = milPlayers.map(([pid, p]) =>
-        `<div style="font-size:0.8rem;margin:2px 0">${FACTION_FLAG[p.faction]||''} ${p.name}: ${moveDone[pid] ? '<span style="color:var(--green)">✓ Confirmed</span>' : '<span style="color:var(--text-muted)">Pending…</span>'}</div>`
-      ).join('');
-      return `${statusLines}
-        ${allConfirmed ? '<div style="font-size:0.75rem;color:var(--green);margin-top:4px">✓ Movement confirmed — use the Interception tab</div>' : '<div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px">Interception tab unlocks when all players confirm movement</div>'}`;
-    })()}
-
-    <div class="section-label" style="margin-top:20px">Campaign History</div>
-    <p style="font-size:0.82rem;color:var(--text-muted);margin:4px 0 8px">Turn-by-turn summary of dispatches, repairs and GM notes.</p>
-    <button class="btn btn-sm" onclick="openHistory()">📜 View History</button>
-
-    <div class="section-label" style="margin-top:20px">Backup</div>
-    <p style="font-size:0.82rem;color:var(--text-muted);margin:4px 0 8px">Download a full JSON snapshot of <strong>${campaignId}</strong>.</p>
-    <button class="btn btn-sm" onclick="downloadBackup()">⬇ Download Backup</button>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="btn btn-sm" onclick="downloadBackup()">⬇ Download Backup</button>
+    </div>
 
     <div class="section-label" style="margin-top:20px;color:var(--red)">Reset This Campaign</div>
     <p style="font-size:0.82rem;color:var(--text-muted);margin:4px 0 10px">Wipe all players, ships, and dispatches for <strong>${campaignId}</strong>.</p>
@@ -2119,6 +2111,57 @@ window.campaignCreate = function() {
   const id = document.getElementById('cm-new').value.trim().toLowerCase().replace(/[^a-z0-9_-]/g,'');
   if (!id) { showToast('Enter a campaign name'); return; }
   location.hash = id; location.reload();
+};
+
+window.confirmAdvanceTurn = function() {
+  const currentTurn = (appData.meta || {}).turn || 1;
+  const nextTurn = currentTurn + 1;
+  const ships = appData.ships || {};
+  const players = appData.players || {};
+
+  // Ships returning from repair on the next turn
+  const returning = Object.values(ships).filter(s =>
+    s.status === 'repairing' && s.availableIn === `Turn ${nextTurn}`
+  );
+
+  // Ships still in repair after advance
+  const stillRepairing = Object.values(ships).filter(s =>
+    s.status === 'repairing' && s.availableIn !== `Turn ${nextTurn}`
+  );
+
+  let summaryHtml = `<p style="font-size:0.9rem;color:var(--text-muted);margin:0 0 14px">Advance from <strong>Turn ${currentTurn}</strong> to <strong>Turn ${nextTurn}</strong>?</p>`;
+
+  if (returning.length) {
+    summaryHtml += `<div class="section-label" style="margin-top:0;color:var(--green)">Returning from Repair (${returning.length})</div>`;
+    summaryHtml += returning.map(s => {
+      const p = players[s.player] || {};
+      return `<div style="font-size:0.85rem;padding:3px 0">⚓ <strong>${s.name}</strong> <span style="color:var(--text-muted)">${p.name||s.player} · ${s.repairPort||'port'} · restored to ${s.spMax} SP</span></div>`;
+    }).join('');
+  }
+
+  if (stillRepairing.length) {
+    summaryHtml += `<div class="section-label" style="margin-top:10px;color:var(--text-muted)">Still In Repair (${stillRepairing.length})</div>`;
+    summaryHtml += stillRepairing.map(s => {
+      const p = players[s.player] || {};
+      return `<div style="font-size:0.85rem;padding:3px 0;color:var(--text-muted)">🔧 ${s.name} <span style="font-size:0.78rem">${p.name||s.player} · available ${s.availableIn||'unknown'}</span></div>`;
+    }).join('');
+  }
+
+  if (!returning.length && !stillRepairing.length) {
+    summaryHtml += `<div style="font-size:0.85rem;color:var(--text-muted);font-style:italic;margin-bottom:8px">No ships in repair.</div>`;
+  }
+
+  summaryHtml += `<div style="font-size:0.78rem;color:var(--text-muted);margin-top:12px;padding:8px;background:var(--surface2);border-radius:4px">
+    Movement confirmations and interception rolls will be reset for Turn ${nextTurn}.
+  </div>`;
+
+  showModal(`<button class="modal-close" onclick="closeModal()">×</button>
+    <h2>Advance to Turn ${nextTurn}</h2>
+    ${summaryHtml}
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn" onclick="closeModal();adjustTurn(1)">Confirm — Advance Turn</button>
+    </div>`);
 };
 
 window.saveTurn = async function() {
