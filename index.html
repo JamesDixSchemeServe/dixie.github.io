@@ -949,6 +949,20 @@ function shipCard(id, s) {
       <div class="gs-item"><div class="gs-label">Knots</div><div class="gs-val">${_shipKnots(s.type, s.fastSailer)}</div></div>
       <div class="gs-item"><div class="gs-label">Break</div><div class="gs-val">${_shipBreak(s.type, s.spMax)}</div></div>
     </div>
+    ${(() => {
+      const sd = s.structuralDamage || [];
+      const ch = s.crewHits || 0;
+      if (!sd.length && !ch) return '';
+      let html = '<div class="ship-meta" style="margin-top:4px">';
+      sd.forEach(d => {
+        const label = d.type === 'mast' ? `${d.mast} Mast` : 'Rudder';
+        html += `<span class="tag" style="color:var(--red);border-color:var(--red)">⚠ ${label}</span>`;
+      });
+      if (ch >= 2) html += `<span class="tag" style="color:var(--red);border-color:var(--red)">👥 Crew Reduced</span>`;
+      else if (ch === 1) html += `<span class="tag" style="color:#e8a44a;border-color:#e8a44a">👥 Crew Hit</span>`;
+      html += '</div>';
+      return html;
+    })()}
     ${captureLines}
     ${s.previousName ? `<div class="ship-notes" style="color:var(--text-muted)">Formerly: ${s.previousName}</div>` : ''}
     ${s.notes ? `<div class="ship-notes">${s.notes}</div>` : ''}
@@ -1509,7 +1523,8 @@ window.showPlayerModal = function(pid) {
         <button class="res-adj" onclick="adjRes('pm-res',-50)">−</button>
         <input type="number" id="pm-res" value="${p.resources}" style="width:90px;text-align:center">
         <button class="res-adj" onclick="adjRes('pm-res',50)">+</button>
-        <span style="font-size:0.75rem;color:var(--text-muted)">or type amount</span>
+        <button class="btn btn-sm btn-ghost" onclick="adjRes('pm-res',250)" style="margin-left:8px">+250</button>
+        <button class="btn btn-sm btn-ghost" onclick="adjRes('pm-res',500)">+500</button>
       </div>
     </div>
     <div class="form-row"><label>Admiralty Favour</label>
@@ -1698,6 +1713,26 @@ function shipFormHtml(s) {
       ${MERCHANT_FACTIONS.filter(f=>f!=='Other').map(f=>`<option value="${f}"${s.faction===f?' selected':''}>${FACTION_FLAG[f]||''} ${f}</option>`).join('')}
       <option value="Other"${s.faction==='Other'?' selected':''}>Other</option>
     </select></div>` : '<span id="sf-merchantFaction" style="display:none"></span>'}
+    <div class="section-label" style="margin-top:14px">Persistent Damage</div>
+    <input type="hidden" id="sf-structDamage" value="${JSON.stringify(s.structuralDamage||[])}">
+    <div style="margin-bottom:8px">
+      <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:6px">Structural Damage <span style="color:var(--red)">(10 resources each — major port only)</span></div>
+      <div id="sf-structDamage-list" style="margin-bottom:6px"></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" onclick="addStructDamage('mast','Mizzen')">+ Mizzen Mast</button>
+        <button class="btn btn-ghost btn-sm" onclick="addStructDamage('mast','Main')">+ Main Mast</button>
+        <button class="btn btn-ghost btn-sm" onclick="addStructDamage('mast','Fore')">+ Fore Mast</button>
+        <button class="btn btn-ghost btn-sm" onclick="addStructDamage('rudder')">+ Rudder / Steering</button>
+      </div>
+    </div>
+    <div style="margin-bottom:8px">
+      <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:6px">Crew Hits <span style="color:var(--text-muted)">(2 hits reduces crew level until major port)</span></div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <button class="res-adj" onclick="adjCrewHits(-1)">−</button>
+        <input type="number" id="sf-crewHits" value="${s.crewHits||0}" min="0" max="9" style="width:60px;text-align:center">
+        <button class="res-adj" onclick="adjCrewHits(1)">+</button>
+      </div>
+    </div>
     <div class="form-row"><label>Notes</label><textarea id="sf-notes" rows="2">${s.notes||''}</textarea></div>`;
 }
 
@@ -1727,6 +1762,8 @@ function readShipForm(existing) {
     sunkBy: document.getElementById('sf-sunkBy').value || '',
     capturedBy: document.getElementById('sf-capturedBy').value || '',
     player: document.getElementById('sf-player').value || existing.player,
+    structuralDamage: JSON.parse(document.getElementById('sf-structDamage')?.value || '[]'),
+    crewHits: parseInt(document.getElementById('sf-crewHits')?.value) || 0,
     notes: document.getElementById('sf-notes').value.trim(),
     faction: (() => {
       const mf = document.getElementById('sf-merchantFaction');
@@ -1750,7 +1787,47 @@ window.openEditShip = function(id) {
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
       <button class="btn" onclick="saveShip('${id}')">Save</button>
     </div>`);
-  _renderAsDecks(); _renderAsBroad();
+  _renderAsDecks(); _renderAsBroad(); _renderStructDamageList();
+};
+
+// ─── PERSISTENT DAMAGE HELPERS ───────────────────────────────────────────────
+function _renderStructDamageList() {
+  const el = document.getElementById('sf-structDamage');
+  const list = document.getElementById('sf-structDamage-list');
+  if (!el || !list) return;
+  const damages = JSON.parse(el.value || '[]');
+  if (!damages.length) {
+    list.innerHTML = '<span style="font-size:0.8rem;color:var(--text-muted)">None</span>';
+    return;
+  }
+  list.innerHTML = damages.map((d, i) => {
+    const label = d.type === 'mast' ? `${d.mast} Mast Hit` : 'Rudder / Steering Hit';
+    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <span style="color:var(--red);font-size:0.85rem">⚠ ${label}</span>
+      <button class="btn btn-ghost btn-sm" style="color:var(--red);padding:0 6px;line-height:1" onclick="removeStructDamage(${i})">×</button>
+    </div>`;
+  }).join('');
+}
+
+window.addStructDamage = function(type, mast) {
+  const el = document.getElementById('sf-structDamage');
+  const damages = JSON.parse(el.value || '[]');
+  damages.push(type === 'mast' ? {type:'mast', mast} : {type:'rudder'});
+  el.value = JSON.stringify(damages);
+  _renderStructDamageList();
+};
+
+window.removeStructDamage = function(index) {
+  const el = document.getElementById('sf-structDamage');
+  const damages = JSON.parse(el.value || '[]');
+  damages.splice(index, 1);
+  el.value = JSON.stringify(damages);
+  _renderStructDamageList();
+};
+
+window.adjCrewHits = function(delta) {
+  const el = document.getElementById('sf-crewHits');
+  el.value = Math.max(0, (parseInt(el.value) || 0) + delta);
 };
 
 // ─── ADD SHIP (single-step) ───────────────────────────────────────────────────
