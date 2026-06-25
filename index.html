@@ -922,7 +922,7 @@ function _shipBreak(type, spMax) {
   const d=t.includes('1st rate')||t.includes('2nd rate')||t.includes('3rd rate')?3.5:t.includes('4th rate')||t.includes('5th rate')||t.includes('heavy frigate')?4:4.5;
   return Math.max(1,Math.round((spMax||0)/d));
 }
-const CHASER_LABELS={'L':'Lt.LG','M':'Med.LG','H':'Hvy.LG','LC':'Lt.Carr','C':'Carr','HC':'Hvy.Carr'};
+const CHASER_LABELS={'L':'Light (L)','M':'Medium (M)','H':'Heavy (H)','LC':'Light Carr. (LC)','C':'Carronade (C)','HC':'Heavy Carr. (HC)'};
 function _defaultRig(type) {
   const t = (type||'').toLowerCase();
   if (t.includes('xebec')||t.includes('tartane')||t.includes('felucca')||t.includes('galley')||t.includes('galiot')) return 'Lateen';
@@ -1050,8 +1050,8 @@ function shipCard(id, s) {
     <div class="game-stat-bar">
       <div class="gs-item"><div class="gs-label">Size</div><div class="gs-val">${_shipSize(s.type)}</div></div>
       <div class="gs-item"><div class="gs-label">Broadsides</div><div class="gs-val" style="color:var(--accent)">${broadStr||'—'}</div></div>
-      <div class="gs-item"><div class="gs-label">Bow</div><div class="gs-val">${s.bowChaser||'—'}</div></div>
-      <div class="gs-item"><div class="gs-label">Stern</div><div class="gs-val">${s.sternChaser||'—'}</div></div>
+      <div class="gs-item"><div class="gs-label">Bow</div><div class="gs-val" style="color:${s.bowChaser?'var(--accent)':'inherit'}">${s.bowChaser?'1'+s.bowChaser:'—'}</div></div>
+      <div class="gs-item"><div class="gs-label">Stern</div><div class="gs-val" style="color:${s.sternChaser?'var(--accent)':'inherit'}">${s.sternChaser?'1'+s.sternChaser:'—'}</div></div>
       <div class="gs-item"><div class="gs-label">SP</div><div class="gs-val gs-sp"><button class="gs-btn" onclick="shipSpAdj('${id}',-1)">−</button><span style="color:${spColor}">${s.spCurrent}/${s.spMax}</span><button class="gs-btn" onclick="shipSpAdj('${id}',1)">+</button></div></div>
       <div class="gs-item"><div class="gs-label">Turn</div><div class="gs-val" style="color:${_shipTurn(s.type)==='Red'?'var(--red)':_shipTurn(s.type)==='Yellow'?'#f4c430':'var(--green)'}">${_shipTurn(s.type)}</div></div>
       <div class="gs-item"><div class="gs-label">Knots</div><div class="gs-val">${_shipKnots(s.type, s.fastSailer)}</div></div>
@@ -2947,13 +2947,11 @@ window.openAddShip = function(playerId, faction) {
     <div class="form-grid" style="margin-top:10px">
       <div class="form-row"><label>Bow Chaser</label><select id="as-bow" onchange="asCalc()">
         <option value="">None</option>
-        <option value="L">Lt. Long Gun</option><option value="M">Med. Long Gun</option><option value="H">Hvy. Long Gun</option>
-        <option value="LC">Lt. Carronade</option><option value="C">Carronade</option><option value="HC">Hvy. Carronade</option>
+        ${['L','M','H','LC','C','HC'].map(v=>`<option value="${v}">${CHASER_LABELS[v]}</option>`).join('')}
       </select></div>
       <div class="form-row"><label>Stern Chaser</label><select id="as-stern" onchange="asCalc()">
         <option value="">None</option>
-        <option value="L">Lt. Long Gun</option><option value="M">Med. Long Gun</option><option value="H">Hvy. Long Gun</option>
-        <option value="LC">Lt. Carronade</option><option value="C">Carronade</option><option value="HC">Hvy. Carronade</option>
+        ${['L','M','H','LC','C','HC'].map(v=>`<option value="${v}">${CHASER_LABELS[v]}</option>`).join('')}
       </select></div>
     </div>
 
