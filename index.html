@@ -1337,19 +1337,22 @@ function renderMap() {
 
     let x, y, atPort;
 
-    let startX, startY;
+    let stackedUnderEscort = false;
 
-    // If this merchant group has an escort whose position we know, stack below it
+    // If this merchant group has an escort whose position we know, pin directly below it
     if (isMerchant && grp.escortKey) {
       const escPos = escortPositions[`${grp.location}|||${grp.escortKey}`];
       if (escPos) {
-        startX = escPos.x; startY = escPos.y + 4.5; atPort = escPos.atPort;
+        x = escPos.x; y = escPos.y + 3.8; atPort = escPos.atPort;
+        placed.push({x, y});
+        stackedUnderEscort = true;
       }
     }
 
-    if (startX === undefined) {
+    if (!stackedUnderEscort) {
       const idx = locCounters[loc] = (locCounters[loc] || 0);
       locCounters[loc]++;
+      let startX, startY;
       const portPos = MAP_PORT_POS[loc];
       if (portPos) {
         startX = portPos.x + (idx % 2 === 0 ? -4 : 4);
@@ -1360,10 +1363,9 @@ function renderMap() {
         const pos = slots[idx % slots.length] || { x: 30, y: 50 };
         startX = pos.x; startY = pos.y; atPort = false;
       }
+      const resolved = findClear(startX, startY);
+      x = resolved.x; y = resolved.y;
     }
-
-    const resolved = findClear(startX, startY);
-    x = resolved.x; y = resolved.y;
 
     // Record position for potential convoy stacking
     if (!isMerchant) {
@@ -1422,8 +1424,22 @@ window.mapGroupClick = function(encodedKey) {
 
   const isMerchant = MERCHANT_FACTIONS.includes(p.faction) || p.faction === 'Merchant';
   const sqnLabel = squadron ? ` — Squadron ${squadron}` : '';
-  const displayName = isMerchant ? 'Merchants' : (p.name || playerId);
+  const displayName = isMerchant ? 'Merchant Convoy' : (p.name || playerId);
   const officers = [...new Set(groupShips.map(([,s]) => s.officer).filter(Boolean))];
+
+  // Find escort for this merchant group
+  let escortLine = '';
+  if (isMerchant) {
+    const escortedShip = groupShips.find(([,s]) => s.escortedBy);
+    if (escortedShip) {
+      const [escPlayerId, escSqn] = (escortedShip[1].escortedBy || '').split('|||');
+      const escPlayer = players[escPlayerId] || {};
+      const escLabel = escPlayer.name ? `${FACTION_FLAG[escPlayer.faction]||''} ${escPlayer.name}${escSqn ? ` — Squadron ${escSqn}` : ''}` : escPlayerId;
+      escortLine = `<div class="stat-row"><span class="stat-label">Escorted by</span><span class="stat-value">${escLabel}</span></div>`;
+    } else {
+      escortLine = `<div class="stat-row"><span class="stat-label">Escort</span><span class="stat-value" style="color:var(--text-muted)">None assigned</span></div>`;
+    }
+  }
 
   const shipRows = groupShips.map(([id, s]) => {
     const statusBadge = s.status && s.status !== 'active'
@@ -1437,9 +1453,9 @@ window.mapGroupClick = function(encodedKey) {
 
   showModal(`<button class="modal-close" onclick="closeModal()">×</button>
     <h2>${flag} ${displayName}${sqnLabel}</h2>
-    <div class="stat-row"><span class="stat-label">Faction</span><span class="stat-value">${p.faction||'—'}</span></div>
     <div class="stat-row"><span class="stat-label">Location</span><span class="stat-value">${loc}</span></div>
-    ${p.officerName ? `<div class="stat-row"><span class="stat-label">Officer</span><span class="stat-value">${p.officerName}</span></div>` : ''}
+    ${escortLine}
+    ${!isMerchant && p.officerName ? `<div class="stat-row"><span class="stat-label">Officer</span><span class="stat-value">${p.officerName}</span></div>` : ''}
     ${officers.length ? `<div class="stat-row"><span class="stat-label">Ship Officers</span><span class="stat-value">${officers.join(', ')}</span></div>` : ''}
     <div class="section-label" style="margin-top:14px">Ships (${groupShips.length})</div>
     ${shipRows}
