@@ -1639,8 +1639,8 @@ function shipFormHtml(s) {
       <div class="form-row"><label>Cost (resources)</label><input type="number" id="sf-cost" value="${s.cost||0}"></div>
     </div>
     <div class="form-grid">
-      <div class="form-row"><label>SP Current</label><input type="number" id="sf-spCurrent" value="${s.spCurrent||0}" min="0"></div>
-      <div class="form-row"><label>SP Max</label><input type="number" id="sf-spMax" value="${s.spMax||0}" min="1"></div>
+      <div class="form-row"><label>SP Current</label><input type="number" id="sf-spCurrent" value="${s.spCurrent||0}" min="0" oninput="recalcRepairCost()"></div>
+      <div class="form-row"><label>SP Max</label><input type="number" id="sf-spMax" value="${s.spMax||0}" min="1" oninput="recalcRepairCost()"></div>
     </div>
 
     <div class="section-label" style="margin-top:14px">Armament</div>
@@ -1677,10 +1677,9 @@ function shipFormHtml(s) {
     </div>
     <div class="form-row"><label>Battles Without Striking</label><input type="number" id="sf-battles" value="${s.battlesWithoutStriking||0}" min="0"></div>
     <div class="form-row"><label>Officer Assigned</label><select id="sf-officer">${officerOpts}</select></div>
-    <div class="form-grid">
-      <div class="form-row"><label>Repair Port</label><select id="sf-repairPort">${repairPortOpts}</select></div>
-      <div class="form-row"><label>Repair Cost Paid</label><input type="number" id="sf-repairCost" value="${s.repairCostPaid||0}"></div>
-    </div>
+    <div class="form-row"><label>Repair Port</label><select id="sf-repairPort" onchange="recalcRepairCost()">${repairPortOpts}</select></div>
+    <div id="repair-cost-breakdown" style="font-size:0.78rem;color:var(--text-muted);margin:-4px 0 8px;padding:6px 8px;background:var(--surface2);border-radius:4px;display:none"></div>
+    <div class="form-row"><label>Repair Cost <span style="font-weight:normal;color:var(--text-muted)">(auto-calculated)</span></label><input type="number" id="sf-repairCost" value="${s.repairCostPaid||0}" readonly style="background:var(--surface2);color:var(--accent);font-weight:bold"></div>
     <div class="form-row"><label>Available in Turn</label><input id="sf-available" value="${s.availableIn||''}"></div>
     <div class="form-row"><label>Sunk By</label><select id="sf-sunkBy">
       <option value="">(none)</option>
@@ -1787,7 +1786,7 @@ window.openEditShip = function(id) {
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
       <button class="btn" onclick="saveShip('${id}')">Save</button>
     </div>`);
-  _renderAsDecks(); _renderAsBroad(); _renderStructDamageList();
+  _renderAsDecks(); _renderAsBroad(); _renderStructDamageList(); recalcRepairCost();
 };
 
 // ─── PERSISTENT DAMAGE HELPERS ───────────────────────────────────────────────
@@ -1815,6 +1814,7 @@ window.addStructDamage = function(type, mast) {
   damages.push(type === 'mast' ? {type:'mast', mast} : {type:'rudder'});
   el.value = JSON.stringify(damages);
   _renderStructDamageList();
+  recalcRepairCost();
 };
 
 window.removeStructDamage = function(index) {
@@ -1823,6 +1823,63 @@ window.removeStructDamage = function(index) {
   damages.splice(index, 1);
   el.value = JSON.stringify(damages);
   _renderStructDamageList();
+  recalcRepairCost();
+};
+
+window.recalcRepairCost = function() {
+  const portEl    = document.getElementById('sf-repairPort');
+  const spCurEl   = document.getElementById('sf-spCurrent');
+  const spMaxEl   = document.getElementById('sf-spMax');
+  const costEl    = document.getElementById('sf-repairCost');
+  const breakdown = document.getElementById('repair-cost-breakdown');
+  if (!portEl || !costEl) return;
+
+  const port    = portEl.value;
+  const spCur   = parseInt(spCurEl?.value) || 0;
+  const spMax   = parseInt(spMaxEl?.value) || 0;
+  const damaged = Math.max(0, spMax - spCur);
+  const damages = JSON.parse(document.getElementById('sf-structDamage')?.value || '[]');
+
+  const MAJOR_PORTS = ['Plymouth','Brest','Rochefort','Ferrol','Lisbon','Cádiz','Gibraltar'];
+  const isMajor    = MAJOR_PORTS.includes(port);
+  const isSecondary = port && !isMajor;
+
+  if (!port) {
+    // Roadstead — free jury rig
+    costEl.value = 0;
+    if (breakdown) {
+      breakdown.style.display = 'block';
+      breakdown.innerHTML = `<strong style="color:var(--accent2)">Roadstead / At Sea</strong> — jury rig only, free, up to D3 SP. Cannot repair structural damage.`;
+    }
+    return;
+  }
+
+  const costPerSP   = isMajor ? 1 : 2;
+  const spCost      = damaged * costPerSP;
+  const structCost  = isMajor ? damages.length * 10 : 0;
+  const total       = spCost + structCost;
+  const portType    = isMajor ? 'Major Port' : 'Secondary Port';
+
+  const spPct = spMax > 0 ? damaged / spMax : 0;
+  const turnsMissed = isMajor
+    ? (spPct >= 0.5 ? 2 : spPct >= 0.25 ? 1 : 0)
+    : (spPct >= 0.5 ? 2 : 1);
+
+  costEl.value = total;
+
+  if (breakdown) {
+    breakdown.style.display = 'block';
+    let html = `<strong style="color:var(--accent)">${portType} — ${port}</strong><br>`;
+    html += `SP damage: ${damaged} × ${costPerSP} = <strong>${spCost} res</strong>`;
+    if (isMajor && damages.length) {
+      html += `<br>Structural damage: ${damages.length} × 10 = <strong>${structCost} res</strong>`;
+    } else if (!isMajor && damages.length) {
+      html += `<br><span style="color:var(--red)">⚠ ${damages.length} structural damage instance${damages.length>1?'s':''} — requires major port</span>`;
+    }
+    html += `<br>Turns in repair: <strong>${turnsMissed}</strong>`;
+    html += `<br>Total: <strong style="color:var(--accent)">${total} resources</strong>`;
+    breakdown.innerHTML = html;
+  }
 };
 
 window.adjCrewHits = function(delta) {
