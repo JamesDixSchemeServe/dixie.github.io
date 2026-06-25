@@ -284,6 +284,7 @@
     <button onclick="showTab('merchant')">Convoy</button>
     <button onclick="showTab('log')">Dispatches</button>
     <button onclick="showTab('map')">Map</button>
+    <button onclick="showTab('history')">History</button>
     <button onclick="showTab('rules')">Rules</button>
   </nav>
   <main id="main-content"></main>
@@ -579,6 +580,7 @@ function renderCurrentTab() {
       case 'merchant': c.innerHTML = renderMerchant(); break;
       case 'log':      c.innerHTML = renderLog(); break;
       case 'map':      c.innerHTML = renderMap(); break;
+      case 'history':  c.innerHTML = renderHistory(); break;
       case 'rules':    c.innerHTML = renderRules(); break;
       default:         c.innerHTML = renderOverview(); break;
     }
@@ -1355,6 +1357,112 @@ window.mapGroupClick = function(encodedKey) {
     </div>`);
 };
 
+// ─── HISTORY ─────────────────────────────────────────────────────────────────
+function renderHistory() {
+  const ships   = appData.ships   || {};
+  const players = appData.players || {};
+  const log     = appData.log     || {};
+  const notes   = appData.turnNotes || {};
+  const currentTurn = (appData.meta || {}).turn || 1;
+
+  // Build per-turn buckets going back from current turn
+  const turns = [];
+  for (let t = currentTurn; t >= 1; t--) turns.push(t);
+
+  // Index dispatches by turn
+  const dispatchByTurn = {};
+  for (const [id, e] of Object.entries(log)) {
+    const t = e.turn || 1;
+    if (!dispatchByTurn[t]) dispatchByTurn[t] = [];
+    dispatchByTurn[t].push({id, ...e});
+  }
+
+  // Index ship events by the turn they completed repair (availableIn) or were lost
+  const repairsCompletedByTurn = {};
+  const lostByTurn = {};
+  for (const [, s] of Object.entries(ships)) {
+    if (s.availableIn) {
+      const m = s.availableIn.match(/\d+/);
+      if (m) {
+        const t = parseInt(m[0]);
+        if (!repairsCompletedByTurn[t]) repairsCompletedByTurn[t] = [];
+        repairsCompletedByTurn[t].push(s);
+      }
+    }
+  }
+
+  let html = `<div class="ships-header"><div>Campaign History</div></div>`;
+
+  for (const t of turns) {
+    const dispatches = dispatchByTurn[t] || [];
+    const repairsDone = repairsCompletedByTurn[t] || [];
+    const noteText = notes[t] || '';
+
+    html += `<div class="card" style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div class="card-title" style="margin:0">Turn ${t}</div>
+        <button class="btn btn-sm btn-ghost" onclick="openTurnNote(${t})">✏ Notes</button>
+      </div>`;
+
+    if (noteText) {
+      html += `<div style="background:var(--surface1);border-left:3px solid var(--accent);padding:8px 12px;border-radius:4px;font-size:0.85rem;margin-bottom:10px;white-space:pre-wrap">${noteText}</div>`;
+    }
+
+    if (dispatches.length) {
+      html += `<div class="section-label" style="margin-top:0;margin-bottom:6px">Dispatches (${dispatches.length})</div>`;
+      for (const e of dispatches) {
+        const rp = players[e.reporter] || {};
+        const flag = FACTION_FLAG[rp.faction] || '';
+        const oppNames = (e.opponents || []).map(oid => {
+          const op = players[oid]; return op ? `${FACTION_FLAG[op.faction]||''} ${op.officerName||op.name}` : oid;
+        }).join(', ');
+        html += `<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:0.82rem">
+          <span style="font-weight:600">${flag} ${rp.officerName || e.reporter || '—'}</span>
+          ${oppNames ? `<span style="color:var(--text-muted)"> vs ${oppNames}</span>` : ''}
+          ${e.location ? `<span style="color:var(--text-muted);margin-left:6px">· ${e.location}</span>` : ''}
+        </div>`;
+      }
+    }
+
+    if (repairsDone.length) {
+      html += `<div class="section-label" style="margin-top:8px;margin-bottom:6px">Returned from Repair</div>`;
+      for (const s of repairsDone) {
+        const p = players[s.player] || {};
+        html += `<div style="font-size:0.82rem;padding:3px 0">⚓ <strong>${s.name}</strong> <span style="color:var(--text-muted)">(${p.name||s.player})</span></div>`;
+      }
+    }
+
+    if (!dispatches.length && !repairsDone.length && !noteText) {
+      html += `<div style="font-size:0.8rem;color:var(--text-muted);font-style:italic">No activity recorded.</div>`;
+    }
+
+    html += `</div>`;
+  }
+
+  return html;
+}
+
+window.openTurnNote = function(turn) {
+  const existing = (appData.turnNotes || {})[turn] || '';
+  showModal(`<button class="modal-close" onclick="closeModal()">×</button>
+    <h2>Turn ${turn} — Notes</h2>
+    <div class="form-row"><label>GM Notes</label>
+      <textarea id="tn-text" rows="6" style="width:100%;resize:vertical">${existing}</textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn" onclick="saveTurnNote(${turn})">Save</button>
+    </div>`);
+};
+
+window.saveTurnNote = async function(turn) {
+  const text = document.getElementById('tn-text').value.trim();
+  await update(cref('/turnNotes'), { [turn]: text });
+  closeModal();
+  showToast(`Turn ${turn} notes saved`);
+  renderCurrentTab();
+};
+
 // ─── LOG ──────────────────────────────────────────────────────────────────────
 function renderRules() {
   const pdfUrl = new URL('rules.pdf', location.href).href;
@@ -1435,6 +1543,10 @@ window.openCampaignModal = function() {
       <button class="btn btn-sm" onclick="campaignClone()">Clone</button>
     </div>
 
+    <div class="section-label" style="margin-top:20px">Backup</div>
+    <p style="font-size:0.82rem;color:var(--text-muted);margin:4px 0 8px">Download a full JSON snapshot of <strong>${campaignId}</strong>.</p>
+    <button class="btn btn-sm" onclick="downloadBackup()">⬇ Download Backup</button>
+
     <div class="section-label" style="margin-top:20px;color:var(--red)">Reset This Campaign</div>
     <p style="font-size:0.82rem;color:var(--text-muted);margin:4px 0 10px">Wipe all players, ships, and dispatches for <strong>${campaignId}</strong>.</p>
     <button class="btn btn-danger" onclick="campaignNew()">Reset Campaign</button>
@@ -1508,6 +1620,17 @@ window.campaignNew = async function() {
   if (!confirm('Start a new campaign?\n\nThis will permanently erase ALL players, ships, and dispatches. This cannot be undone.')) return;
   await set(cref('/'), { meta: { turn: 1, phase: 1 } });
   closeModal(); showToast('Campaign reset');
+};
+
+window.downloadBackup = function() {
+  const json = JSON.stringify({ campaignId, exportedAt: new Date().toISOString(), data: appData }, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `${campaignId}-turn${(appData.meta||{}).turn||1}-backup.json`;
+  a.click();
+  URL.revokeObjectURL(url);
 };
 
 // ─── PLAYER MODAL ─────────────────────────────────────────────────────────────
