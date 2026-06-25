@@ -704,7 +704,7 @@ function renderPlayer(pid) {
 
   let html = `<div class="player-row" style="grid-template-columns:1fr">
     <div class="player-card" onclick="showPlayerModal('${pid}')">
-      <h3><span class="faction-dot" style="background:${FACTION_COLOR[p.faction]}"></span>${p.name} <span style="font-size:0.75rem;color:var(--text-muted)">(${p.faction})</span></h3>
+      <h3>${FACTION_FLAG[p.faction]||''} ${p.name} <span style="font-size:0.75rem;color:var(--text-muted)">(${p.faction})</span></h3>
       <div style="font-size:0.8rem;color:var(--text-muted);margin-top:2px">${p.officerName} · ${p.rank === 'Post Captain' ? 'Post Captain' : 'Master and Commander'}</div>
       <div style="display:flex;gap:16px;margin-top:8px">
         <div><div class="res">${p.resources} <span style="font-size:0.7rem;color:var(--text-muted)">resources</span></div></div>
@@ -792,7 +792,7 @@ function renderFaction(faction) {
     const favClass = p.admiraltyFavour > 0 ? 'fav-pos' : p.admiraltyFavour < 0 ? 'fav-neg' : 'fav-zero';
     const favLabel = p.admiraltyFavour > 0 ? `+${p.admiraltyFavour}` : `${p.admiraltyFavour}`;
     html += `<div class="player-card" onclick="showPlayerModal('${pid}')">
-      <h3>${p.name}</h3>
+      <h3>${FACTION_FLAG[p.faction]||''} ${p.name}</h3>
       <div style="font-size:0.75rem;color:var(--text-muted)">${p.officerName} · ${p.rank === 'Post Captain' ? 'Post Captain' : 'M&C'}</div>
       <div class="res">${p.resources} <span style="font-size:0.7rem;color:var(--text-muted)">resources</span></div>
       <div class="favour">Favour: <span class="favour-val ${favClass}">${favLabel}</span></div>
