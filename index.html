@@ -687,7 +687,8 @@ window.adjustTurn = async function(delta) {
     if (completing.length) showToast(`Turn ${newVal}: ${completing.length} ship(s) returned to active service`);
   }
 
-  multiUpdate['/meta/movementDone'] = {};
+  multiUpdate['/meta/movementDone']     = {};
+  multiUpdate['/meta/interceptionUsed'] = {};
   await update(cref('/'), multiUpdate);
 };
 
@@ -752,11 +753,17 @@ function renderPlayer(pid) {
   });
 
   if (activeFilter === 'all' || activeFilter === 'active') {
+    const detached = active.filter(([,s]) => s.role === 'inshoreScout' || s.role === 'squadronScreen');
+    const squadronShips = active.filter(([,s]) => s.role !== 'inshoreScout' && s.role !== 'squadronScreen');
     const bySquadron = {};
-    active.forEach(([id,s]) => { const sq = s.squadron || '(no squadron)'; (bySquadron[sq]||(bySquadron[sq]=[])).push([id,s]); });
+    squadronShips.forEach(([id,s]) => { const sq = s.squadron || '(no squadron)'; (bySquadron[sq]||(bySquadron[sq]=[])).push([id,s]); });
     for (const [sq, sqs] of Object.entries(bySquadron)) {
       html += `<div class="section-label">${sq !== '(no squadron)' ? `Squadron ${sq}` : 'Individual / Detached'}</div>`;
       html += `<div class="ship-list">${sqs.map(([id,s]) => shipCard(id,s)).join('')}</div>`;
+    }
+    if (detached.length) {
+      html += `<div class="section-label">Scouts &amp; Screens</div>`;
+      html += `<div class="ship-list">${detached.map(([id,s]) => shipCard(id,s)).join('')}</div>`;
     }
   }
   if ((activeFilter === 'all' || activeFilter === 'repairing') && repairing.length) {
@@ -1310,6 +1317,7 @@ function renderMap() {
   // Exclude sunk/lost ships
   const activeShips = Object.entries(ships).filter(([,s]) =>
     s.location && s.status !== 'sunk' && s.status !== 'lost' && s.status !== 'captured'
+    && s.role !== 'inshoreScout' && s.role !== 'squadronScreen'
   );
 
   // Group into squadrons: key = location|playerId|squadron
@@ -1546,6 +1554,8 @@ function areAllied(fac1, fac2) {
 window.openInterception = function() {
   const ships   = appData.ships   || {};
   const players = appData.players || {};
+  const usedThisTurn = (appData.meta || {}).interceptionUsed || {};
+  const sqnUsed = key => !!usedThisTurn[key.replace(/\|/g,'_')];
 
   // Build squadron groups per zone: key = zone, value = array of { key, player, faction, playerName, squadron, ships[] }
   const zoneSquadrons = {}; // zone → [squadronEntry]
@@ -1613,16 +1623,22 @@ window.openInterception = function() {
         <div class="form-row"><label>Seeker squadron</label>
           <select id="iseek-${zoneId}" onchange="recalcInterceptionMod('${zoneId}')">
             ${sqns.filter(e=>!e.isMerchant).map(e=>{
+              const used = sqnUsed(e.key);
               const flag = FACTION_FLAG[e.faction]||'';
-              return `<option value="${encodeURIComponent(e.key)}">${flag} ${e.playerName}${e.squadron?` — Sqn ${e.squadron}`:''} (${e.faction})</option>`;
+              return `<option value="${encodeURIComponent(e.key)}"${used?' disabled':''}>
+                ${flag} ${e.playerName}${e.squadron?` — Sqn ${e.squadron}`:''} (${e.faction})${used?' ✓ used':''}
+              </option>`;
             }).join('')}
           </select></div>
         <div class="form-row"><label>Target squadron</label>
           <select id="itgt-${zoneId}" onchange="recalcInterceptionMod('${zoneId}')">
             <option value="">(select target)</option>
             ${sqns.filter(e=>!e.isMerchant).map(e=>{
+              const used = sqnUsed(e.key);
               const flag = FACTION_FLAG[e.faction]||'';
-              return `<option value="${encodeURIComponent(e.key)}">${flag} ${e.playerName}${e.squadron?` — Sqn ${e.squadron}`:''} (${e.faction})</option>`;
+              return `<option value="${encodeURIComponent(e.key)}"${used?' disabled':''}>
+                ${flag} ${e.playerName}${e.squadron?` — Sqn ${e.squadron}`:''} (${e.faction})${used?' ✓ used':''}
+              </option>`;
             }).join('')}
             ${merchants.length ? `<option value="__merchant__">🛒 Merchant Convoy (${merchants.reduce((n,e)=>n+e.ships.length,0)} ships)</option>` : ''}
           </select></div>
@@ -1635,8 +1651,9 @@ window.openInterception = function() {
     </div>`;
   });
 
-  // Store squadron data for use in roll/recalc functions
+  // Store squadron data and used-set for use in roll/recalc functions
   window._interceptZoneData = zoneSquadrons;
+  window._interceptUsed = usedThisTurn;
 
   html += `<div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>`;
   document.getElementById('modal-content').style.maxWidth = '620px';
@@ -1726,6 +1743,32 @@ window.rollInterception = function(zoneId) {
     const col = intercepts ? 'var(--accent)' : 'var(--text-muted)';
     const modNote = mod !== 0 && !forced ? ` (${mod>=0?'+':''}${mod} → ${total})` : '';
     el.innerHTML = `<strong style="color:${col}">${d1}+${d2}=${raw}${modNote} — ${intercepts?'⚔ BATTLE':'✗ No intercept'}</strong>${forced?` <span style="font-size:0.75rem;color:var(--text-muted)">(forced)</span>`:''}`;
+  }
+
+  // Mark both squadrons as used for this turn
+  const updates = {};
+  if (seekKey) updates[`/meta/interceptionUsed/${seekKey.replace(/\|/g,'_')}`] = true;
+  if (tgtKey && tgtKey !== '__merchant__') updates[`/meta/interceptionUsed/${tgtKey.replace(/\|/g,'_')}`] = true;
+  if (Object.keys(updates).length) {
+    update(cref('/'), updates);
+    // Update local cache so re-rolls are blocked immediately
+    if (!appData.meta) appData.meta = {};
+    if (!appData.meta.interceptionUsed) appData.meta.interceptionUsed = {};
+    if (seekKey) appData.meta.interceptionUsed[seekKey.replace(/\|/g,'_')] = true;
+    if (tgtKey && tgtKey !== '__merchant__') appData.meta.interceptionUsed[tgtKey.replace(/\|/g,'_')] = true;
+    // Disable the roll button and grey out used options in this zone
+    const rollBtn = document.querySelector(`#izone-${zoneId} .btn`);
+    if (rollBtn) { rollBtn.disabled = true; rollBtn.style.opacity = '0.45'; }
+    [document.getElementById(`iseek-${zoneId}`), document.getElementById(`itgt-${zoneId}`)].forEach(sel => {
+      if (!sel) return;
+      [...sel.options].forEach(opt => {
+        const k = decodeURIComponent(opt.value);
+        if (k && k !== '__merchant__' && appData.meta.interceptionUsed[k]) {
+          opt.disabled = true;
+          if (!opt.text.includes('✓ used')) opt.text += ' ✓ used';
+        }
+      });
+    });
   }
 };
 
@@ -2775,6 +2818,11 @@ window.saveShip = async function(id) {
       showToast(`Squadron ${data.squadron} is at ${sqnPeers[0][1].location} — move this ship there first`);
       return;
     }
+  }
+
+  // Scouts and screens must be detached from squadrons
+  if (data.role === 'inshoreScout' || data.role === 'squadronScreen') {
+    data.squadron = '';
   }
 
   // Log previous name if renamed
