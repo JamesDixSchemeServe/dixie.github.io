@@ -947,6 +947,14 @@ function shipCard(id, s) {
       ${s.battlesWithoutStriking > 0 ? `<span class="tag">${s.battlesWithoutStriking} battle${s.battlesWithoutStriking>1?'s':''}</span>` : ''}
       ${s.repairPort ? `<span class="tag" style="color:var(--accent2)">⚓ ${s.repairPort}</span>` : ''}
       ${s.availableIn ? `<span class="tag" style="color:var(--accent)">Avail. ${s.availableIn}</span>` : ''}
+      ${(() => {
+        if (!s.squadron) return '';
+        const escortKey = `${s.player}|||${s.squadron}`;
+        const escorting = Object.values(appData.ships || {}).some(m =>
+          (m.faction === 'Merchant' || MERCHANT_FACTIONS.includes(m.faction) || m.player === 'merchant') && m.escortedBy === escortKey
+        );
+        return escorting ? `<span class="tag" style="color:#7ec8e3;border-color:#7ec8e3">🛡 Escorting Convoy</span>` : '';
+      })()}
     </div>
     <div class="sp-bar-wrap"><div class="sp-bar" style="width:${Math.max(0,pct*100)}%;background:${barColor}"></div></div>
     <div class="game-stat-bar">
@@ -1417,7 +1425,8 @@ window.mapGroupClick = function(encodedKey) {
   const displayName = isMerchant ? 'Merchant Convoy' : (p.name || playerId);
   const officers = [...new Set(groupShips.map(([,s]) => s.officer).filter(Boolean))];
 
-  // Find escort for this merchant group
+  // Find escort ships for this merchant group
+  let escortShips = [];
   let escortLine = '';
   if (isMerchant) {
     const escortedShip = groupShips.find(([,s]) => s.escortedBy);
@@ -1426,12 +1435,16 @@ window.mapGroupClick = function(encodedKey) {
       const escPlayer = players[escPlayerId] || {};
       const escLabel = escPlayer.name ? `${FACTION_FLAG[escPlayer.faction]||''} ${escPlayer.name}${escSqn ? ` — Squadron ${escSqn}` : ''}` : escPlayerId;
       escortLine = `<div class="stat-row"><span class="stat-label">Escorted by</span><span class="stat-value">${escLabel}</span></div>`;
+      escortShips = Object.entries(ships).filter(([,s]) =>
+        s.player === escPlayerId && (s.squadron||'') === (escSqn||'') && s.location === loc
+        && s.status !== 'sunk' && s.status !== 'lost' && s.status !== 'captured'
+      );
     } else {
       escortLine = `<div class="stat-row"><span class="stat-label">Escort</span><span class="stat-value" style="color:var(--text-muted)">None assigned</span></div>`;
     }
   }
 
-  const shipRows = groupShips.map(([id, s]) => {
+  function shipRow([id, s]) {
     const statusBadge = s.status && s.status !== 'active'
       ? `<span style="color:var(--text-muted);font-size:0.75rem"> (${s.status})</span>` : '';
     const sp = `<span style="color:var(--text-muted);font-size:0.75rem"> ${s.spCurrent}/${s.spMax} SP</span>`;
@@ -1439,7 +1452,13 @@ window.mapGroupClick = function(encodedKey) {
       ${s.name}${statusBadge}${sp}
       <span style="color:var(--text-muted);font-size:0.75rem;margin-left:4px">${s.type||''}</span>
     </div>`;
-  }).join('');
+  }
+
+  const merchantRows = groupShips.map(shipRow).join('');
+  const escortRows = escortShips.length
+    ? `<div class="section-label" style="margin-top:12px">Escort (${escortShips.length})</div>${escortShips.map(shipRow).join('')}`
+    : '';
+  const totalCount = groupShips.length + escortShips.length;
 
   showModal(`<button class="modal-close" onclick="closeModal()">×</button>
     <h2>${flag} ${displayName}${sqnLabel}</h2>
@@ -1447,8 +1466,9 @@ window.mapGroupClick = function(encodedKey) {
     ${escortLine}
     ${!isMerchant && p.officerName ? `<div class="stat-row"><span class="stat-label">Officer</span><span class="stat-value">${p.officerName}</span></div>` : ''}
     ${officers.length ? `<div class="stat-row"><span class="stat-label">Ship Officers</span><span class="stat-value">${officers.join(', ')}</span></div>` : ''}
-    <div class="section-label" style="margin-top:14px">Ships (${groupShips.length})</div>
-    ${shipRows}
+    <div class="section-label" style="margin-top:14px">Merchants (${groupShips.length})</div>
+    ${merchantRows}
+    ${escortRows}
     <div style="margin-top:14px;display:flex;justify-content:flex-end;gap:8px">
       <button class="btn btn-ghost" onclick="closeModal()">Close</button>
       <button class="btn btn-ghost" onclick="openMoveSquadron('${encodeURIComponent(`${loc}|||${playerId}|||${squadron}`)}')">⛵ Move</button>
@@ -2028,8 +2048,14 @@ function shipFormHtml(s) {
   const repairPortOpts = ['', ...ports]
     .map(p => `<option value="${p}"${s.repairPort===p?' selected':''}>${p||'(none)'}</option>`).join('');
 
+  const escortKey = s.player && s.squadron ? `${s.player}|||${s.squadron}` : null;
+  const isEscorting = escortKey && Object.values(appData.ships || {}).some(m =>
+    (m.faction === 'Merchant' || MERCHANT_FACTIONS.includes(m.faction) || m.player === 'merchant') && m.escortedBy === escortKey
+  );
+
   return `
     <div class="form-row"><label>Ship Name</label><input id="sf-name" value="${s.name||''}"></div>
+    ${isEscorting ? `<div style="margin:-4px 0 8px;padding:6px 10px;background:rgba(126,200,227,0.12);border:1px solid rgba(126,200,227,0.4);border-radius:6px;font-size:0.82rem;color:#7ec8e3">🛡 This ship is currently escorting a merchant convoy</div>` : ''}
     <div class="form-grid">
       <div class="form-row"><label>Type</label><select id="sf-type">${['', ...SHIP_TYPES].map(t=>`<option value="${t}"${s.type===t?' selected':''}>${t||'— select type —'}</option>`).join('')}</select></div>
       <div class="form-row"><label>Cost (resources)</label><input type="number" id="sf-cost" value="${s.cost||0}"></div>
