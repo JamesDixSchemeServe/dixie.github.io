@@ -963,11 +963,15 @@ function shipCard(id, s) {
   const broadCats = ['H','M','L','HC','C','LC'];
   const broadStr  = s.broadside ? broadCats.filter(c=>s.broadside[c]>0).map(c=>s.broadside[c]+c).join('-') : '';
 
+  const breakVal = _shipBreak(s.type, s.spMax);
+  const spColor = s.spCurrent <= breakVal ? 'var(--red)' : pct < 0.5 ? '#e8a44a' : 'var(--text)';
+
   return `<div class="ship-card ${s.status}" id="sc-${id}">
     <div class="ship-top">
       <div>
         <div class="ship-name">${s.name}</div>
-        <div class="ship-type">${totalGuns>0?totalGuns+' gun ':' '}${s.type}${s.officer ? ` · <em>${s.officer}</em>` : ''}</div>
+        <div class="ship-type">${totalGuns>0?totalGuns+' gun ':' '}${s.type}</div>
+        ${s.officer ? `<div class="squadron-label" style="color:var(--accent)">⚑ Flagship · ${s.officer}</div>` : ''}
         ${s.squadron ? `<div class="squadron-label">Squadron ${s.squadron}</div>` : ''}
       </div>
       <div class="ship-actions">
@@ -975,15 +979,15 @@ function shipCard(id, s) {
       </div>
     </div>
     <div class="ship-meta">
-      <span class="tag sp ${spClass}">SP ${s.spCurrent}/${s.spMax}</span>
-      ${broadStr ? `<span class="tag" style="color:var(--accent)">${broadStr}</span>` : ''}
       <span class="tag ${crewClass}">${s.crewLevel} Crew</span>
-      <span class="tag">${s.location}</span>
+      ${!s.repairPort ? `<span class="tag">${s.location}</span>` : ''}
       ${s.fastSailer ? `<span class="tag" style="color:#7ec8e3">⚡ Fast</span>` : ''}
       ${s.swivels ? `<span class="tag" style="color:#e8a44a">🔫 Swivels</span>` : ''}
       ${s.battlesWithoutStriking > 0 ? `<span class="tag">${s.battlesWithoutStriking} battle${s.battlesWithoutStriking>1?'s':''}</span>` : ''}
       ${s.repairPort ? `<span class="tag" style="color:var(--accent2)">⚓ ${s.repairPort}</span>` : ''}
       ${s.availableIn ? `<span class="tag" style="color:var(--accent)">Avail. ${s.availableIn}</span>` : ''}
+      ${s.role === 'inshoreScout' ? `<span class="tag" style="color:#e8a44a;border-color:#e8a44a">🔭 Inshore Scout</span>` : ''}
+      ${s.role === 'squadronScreen' ? `<span class="tag" style="color:#e8a44a;border-color:#e8a44a">🛡 Squadron Screen</span>` : ''}
       ${(() => {
         if (!s.squadron) return '';
         const escortKey = `${s.player}|||${s.squadron}`;
@@ -999,10 +1003,10 @@ function shipCard(id, s) {
       <div class="gs-item"><div class="gs-label">Broadsides</div><div class="gs-val" style="color:var(--accent)">${broadStr||'—'}</div></div>
       <div class="gs-item"><div class="gs-label">Bow</div><div class="gs-val">${CHASER_LABELS[s.bowChaser]||'—'}</div></div>
       <div class="gs-item"><div class="gs-label">Stern</div><div class="gs-val">${CHASER_LABELS[s.sternChaser]||'—'}</div></div>
-      <div class="gs-item"><div class="gs-label">SP</div><div class="gs-val gs-sp"><button class="gs-btn" onclick="shipSpAdj('${id}',-1)">−</button><span>${s.spCurrent}/${s.spMax}</span><button class="gs-btn" onclick="shipSpAdj('${id}',1)">+</button></div></div>
+      <div class="gs-item"><div class="gs-label">SP</div><div class="gs-val gs-sp"><button class="gs-btn" onclick="shipSpAdj('${id}',-1)">−</button><span style="color:${spColor}">${s.spCurrent}/${s.spMax}</span><button class="gs-btn" onclick="shipSpAdj('${id}',1)">+</button></div></div>
       <div class="gs-item"><div class="gs-label">Turn</div><div class="gs-val" style="color:${_shipTurn(s.type)==='Red'?'var(--red)':_shipTurn(s.type)==='Yellow'?'#f4c430':'var(--green)'}">${_shipTurn(s.type)}</div></div>
       <div class="gs-item"><div class="gs-label">Knots</div><div class="gs-val">${_shipKnots(s.type, s.fastSailer)}</div></div>
-      <div class="gs-item"><div class="gs-label">Break</div><div class="gs-val">${_shipBreak(s.type, s.spMax)}</div></div>
+      <div class="gs-item"><div class="gs-label">Break</div><div class="gs-val">${breakVal}</div></div>
     </div>
     ${(() => {
       const sd = s.structuralDamage || [];
