@@ -560,7 +560,7 @@ window.saveConfig = function() {
 window.showTab = function(tab) {
   currentTab = tab;
   activeFilter = 'all';
-  document.querySelectorAll('nav button').forEach((b,i) => b.classList.toggle('active', b.getAttribute('onclick').includes(`'${tab}'`)));
+  document.querySelectorAll('nav button').forEach((b,i) => b.classList.toggle('active', (b.getAttribute('onclick')||'').includes(`'${tab}'`)));
   renderCurrentTab();
 };
 
