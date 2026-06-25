@@ -984,7 +984,15 @@ function shipCard(id, s) {
     ${captureLines}
     ${s.previousName ? `<div class="ship-notes" style="color:var(--text-muted)">Formerly: ${s.previousName}</div>` : ''}
     ${s.notes ? `<div class="ship-notes">${s.notes}</div>` : ''}
-    ${s.status === 'captured' && !s.prizeResolution ? `<div><span class="pending-badge">⏳ Pending Prize Decision</span> <button class="btn btn-sm" style="margin-left:8px;margin-top:6px" onclick="openResolvePrize('${id}')">Resolve</button></div>` : ''}
+    ${(() => {
+      if (s.status !== 'captured' || s.prizeResolution) return '';
+      // Only show prize UI if this ship is a prize on the capturing player's roster.
+      // If capturedBy points to a ship owned by a different player, this is the original
+      // owner's copy of the loss — no prize UI there.
+      const capShip = s.capturedBy && s.capturedBy !== '__accident__' ? (appData.ships || {})[s.capturedBy] : null;
+      if (capShip && capShip.player !== s.player) return '';
+      return `<div><span class="pending-badge">⏳ Pending Prize Decision</span> <button class="btn btn-sm" style="margin-left:8px;margin-top:6px" onclick="openResolvePrize('${id}')">Resolve</button></div>`;
+    })()}
     ${s.status === 'sold' ? `<div class="ship-notes" style="color:var(--text-muted)">💰 Sold for prize money (${s.cost} resources)</div>` : ''}
     ${s.status === 'sunk' && s.sunkBy === '__lost_on_passage__' ? `<div class="ship-notes" style="color:var(--text-muted)">🌊 Lost on passage</div>` : ''}
   </div>`;
