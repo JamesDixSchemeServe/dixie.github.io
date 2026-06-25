@@ -986,7 +986,7 @@ function shipCard(id, s) {
     </div>
     <div class="ship-meta">
       <span class="tag ${crewClass}">${s.crewLevel} Crew</span>
-      ${(s.rig||_defaultRig(s.type)) === 'Square' ? `<span class="tag">⬜ Square</span>` : (s.rig||_defaultRig(s.type)) === 'Lateen' ? `<span class="tag" style="color:#b8a9d9">△ Lateen</span>` : `<span class="tag" style="color:#7ec8e3">◁ Fore &amp; Aft</span>`}
+      ${(s.rig||_defaultRig(s.type)) === 'Square' ? `<span class="tag">⬜ Square Rigged</span>` : (s.rig||_defaultRig(s.type)) === 'Lateen' ? `<span class="tag" style="color:#b8a9d9">△ Lateen Rigged</span>` : `<span class="tag" style="color:#7ec8e3">◁ Fore &amp; Aft Rigged</span>`}
       ${!s.repairPort ? `<span class="tag">${s.location}</span>` : ''}
       ${s.fastSailer ? `<span class="tag" style="color:#7ec8e3">⚡ Fast</span>` : ''}
       ${s.swivels ? `<span class="tag" style="color:#e8a44a">🔫 Swivels</span>` : ''}
@@ -2039,10 +2039,17 @@ window.openCampaignModal = function() {
     `<div style="font-size:0.8rem;margin:2px 0">${FACTION_FLAG[p.faction]||''} ${p.name}: ${moveDone[pid] ? '<span style="color:var(--green)">✓ Confirmed</span>' : '<span style="color:var(--text-muted)">Pending…</span>'}</div>`
   ).join('');
 
+  const playerListHtml = Object.entries(players).map(([pid, p]) =>
+    `<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.82rem;padding:4px 0;border-bottom:1px solid var(--border)">
+      <span>${FACTION_FLAG[p.faction]||''} <strong>${p.name}</strong> <span style="color:var(--text-muted)">${p.officerName||''} · ${p.faction}</span></span>
+      <button class="btn btn-sm btn-danger" style="padding:1px 8px;font-size:0.75rem" onclick="removePlayer('${pid}')">Remove</button>
+    </div>`
+  ).join('') || `<div style="font-size:0.82rem;color:var(--text-muted);font-style:italic">No players yet.</div>`;
+
   showModal(`<button class="modal-close" onclick="closeModal()">×</button>
     <h2>⚙ Campaign Management</h2>
 
-    <div class="section-label">Movement &amp; Interception</div>
+    <div class="section-label" style="margin-top:20px">Movement &amp; Interception</div>
     ${movementStatusLines}
     <div style="margin-top:6px;font-size:0.75rem;color:${allConfirmed?'var(--green)':'var(--text-muted)'}">
       ${allConfirmed ? '✓ Movement confirmed — Interception tab is unlocked' : 'Interception tab unlocks when all players confirm movement'}
@@ -2051,6 +2058,18 @@ window.openCampaignModal = function() {
     <div class="section-label" style="margin-top:20px">Campaign History</div>
     <p style="font-size:0.82rem;color:var(--text-muted);margin:4px 0 8px">Turn-by-turn summary of dispatches, repairs, interception results and GM notes.</p>
     <button class="btn btn-sm" onclick="openHistory()">📜 View History</button>
+
+    <div class="section-label" style="margin-top:20px">Players</div>
+    <div style="margin-bottom:10px">${playerListHtml}</div>
+    <div class="form-grid" style="margin-bottom:6px">
+      <div class="form-row"><label>Name</label><input id="cp-name" placeholder="Player name"></div>
+      <div class="form-row"><label>Officer</label><input id="cp-officer" placeholder="Officer name"></div>
+    </div>
+    <div class="form-grid" style="margin-bottom:10px">
+      <div class="form-row"><label>Faction</label><select id="cp-faction">${FACTIONS.map(f=>`<option value="${f}">${FACTION_FLAG[f]||''} ${f}</option>`).join('')}</select></div>
+      <div class="form-row"><label>Starting Resources</label><input type="number" id="cp-resources" value="500"></div>
+    </div>
+    <button class="btn btn-sm" onclick="campaignAddPlayer()">+ Add Player</button>
 
     <div class="section-label" style="margin-top:20px">Active Campaign Link</div>
     <p style="font-size:0.8rem;color:var(--text-muted);margin:0 0 8px">Share this link — anyone who opens it sees the same live campaign.</p>
@@ -2183,6 +2202,14 @@ window.saveTurn = async function() {
   showToast('Turn & phase saved');
 };
 
+window.removePlayer = async function(pid) {
+  const p = (appData.players || {})[pid];
+  if (!p) return;
+  if (!confirm(`Remove ${p.name}? This does not delete their ships.`)) return;
+  await remove(cref(`/players/${pid}`));
+  openCampaignModal();
+};
+
 window.campaignAddPlayer = async function() {
   const name = document.getElementById('cp-name').value.trim();
   if (!name) { showToast('Player needs a name'); return; }
@@ -2191,10 +2218,8 @@ window.campaignAddPlayer = async function() {
   const resources = parseInt(document.getElementById('cp-resources').value)||500;
   const newRef = push(cref('/players'));
   await set(newRef, { name, faction, resources, officerName: officer, rank: 'Master and Commander', admiraltyFavour: 0 });
-  document.getElementById('cp-name').value = '';
-  document.getElementById('cp-officer').value = '';
-  document.getElementById('cp-resources').value = '500';
   showToast(`${name} (${faction}) added`);
+  openCampaignModal();
 };
 
 window.campaignNew = async function() {
