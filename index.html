@@ -1428,7 +1428,9 @@ window.mapGroupClick = function(encodedKey) {
     && s.status !== 'sunk' && s.status !== 'lost' && s.status !== 'captured'
   );
 
-  const isMerchant = MERCHANT_FACTIONS.includes(p.faction) || p.faction === 'Merchant';
+  const groupFaction = groupShips[0]?.[1]?.faction || p.faction || '';
+  const isMerchant = playerId === 'merchant' || p.faction === 'Merchant' || MERCHANT_FACTIONS.includes(p.faction)
+    || groupFaction === 'Merchant' || MERCHANT_FACTIONS.includes(groupFaction);
   const sqnLabel = squadron ? ` — Squadron ${squadron}` : '';
   const displayName = isMerchant ? 'Merchant Convoy' : (p.name || playerId);
   const officers = [...new Set(groupShips.map(([,s]) => s.officer).filter(Boolean))];
