@@ -378,7 +378,7 @@ let db, appData = {}, currentTab = 'overview', activeFilter = 'all';
 const campaignId = location.hash.replace(/^#/,'').trim().toLowerCase().replace(/[^a-z0-9_-]/g,'');
 const cref = path => ref(db, `/campaigns/${campaignId}${path}`);
 
-const SHIP_TYPES = ['1st Rate','2nd Rate','3rd Rate','4th Rate','Razee','Heavy Frigate','5th Rate Frigate','6th Rate','Ship-Sloop','Brig-Sloop','Gun Brig','Corvette','Cutter','Schooner','Gunboat','Bomb Vessel','Xebec','Large Xebec','Polacre','Galley','Galiot','Tartane','Felucca','Merchantman','East Indiaman','Manila Galleon','Packet Ship','Privateer','Privateer Schooner','Privateer Brig','Privateer Cutter','Letter of Marque'];
+const SHIP_TYPES = ['1st Rate','2nd Rate','3rd Rate','4th Rate','Razee','Heavy Frigate','5th Rate Frigate','6th Rate','Ship-Sloop','Brig-Sloop','Gun Brig','Corvette','Cutter','Schooner','Lugger','Gunboat','Bomb Vessel','Xebec','Large Xebec','Polacre','Galley','Galiot','Tartane','Felucca','Merchantman','East Indiaman','Manila Galleon','Packet Ship','Privateer','Privateer Schooner','Privateer Brig','Privateer Cutter','Letter of Marque'];
 const FACTIONS = ['British','French','Spanish'];
 const MERCHANT_FACTIONS = ['Dutch','Swedish','Danish','American','Prussian','Ottoman','Portuguese','Genoese','Venetian','Ragusian','Other'];
 const FACTION_COLOR = { British:'var(--british)', French:'var(--french)', Spanish:'var(--spanish)', Merchant:'var(--merchant)', Dutch:'var(--merchant)', Swedish:'var(--merchant)', Danish:'var(--merchant)', American:'var(--merchant)', Prussian:'var(--merchant)', Ottoman:'var(--merchant)', Portuguese:'var(--merchant)', Genoese:'var(--merchant)', Venetian:'var(--merchant)', Ragusian:'var(--merchant)', Other:'var(--merchant)' };
@@ -897,7 +897,7 @@ function _shipSize(type) {
   if(t.includes('1st rate')||t.includes('2nd rate')) return 'XL';
   if(t.includes('3rd rate')||t.includes('4th rate')||t.includes('heavy frigate')||t.includes('razee')||t.includes('east indiaman')||t.includes('manila galleon')) return 'L';
   if(t.includes('5th rate')||t.includes('6th rate')||t.includes('frigate')||t.includes('merchantman')) return 'M';
-  if(t.includes('brig')||t.includes('sloop')||t.includes('corvette')||t.includes('schooner')||t.includes('xebec')||t.includes('polacre')||t.includes('privateer')||t.includes('letter of marque')||t.includes('packet')) return 'S';
+  if(t.includes('brig')||t.includes('sloop')||t.includes('corvette')||t.includes('schooner')||t.includes('lugger')||t.includes('xebec')||t.includes('polacre')||t.includes('privateer')||t.includes('letter of marque')||t.includes('packet')) return 'S';
   return 'T';
 }
 function _shipTurn(type) {
@@ -912,7 +912,7 @@ function _shipKnots(type, fastSailer) {
   if(t.includes('1st rate')||t.includes('2nd rate')) b=3;
   else if(t.includes('3rd rate')||t.includes('4th rate')) b=4;
   else if(t.includes('heavy frigate')||t.includes('razee')||t.includes('east indiaman')||t.includes('manila galleon')||t.includes('merchantman')) b=4;
-  else if(t.includes('cutter')||t.includes('schooner')) b=6;
+  else if(t.includes('cutter')||t.includes('schooner')||t.includes('lugger')) b=6;
   return fastSailer?b+1:b;
 }
 function _shipBreak(type, spMax) {
@@ -921,6 +921,12 @@ function _shipBreak(type, spMax) {
   return Math.max(1,Math.round((spMax||0)/d));
 }
 const CHASER_LABELS={'L':'Lt.LG','M':'Med.LG','H':'Hvy.LG','LC':'Lt.Carr','C':'Carr','HC':'Hvy.Carr'};
+function _defaultRig(type) {
+  const t = (type||'').toLowerCase();
+  if (t.includes('xebec')||t.includes('tartane')||t.includes('felucca')||t.includes('galley')||t.includes('galiot')) return 'Lateen';
+  if (t.includes('cutter')||t.includes('schooner')||t.includes('lugger')||t.includes('polacre')) return 'Fore and Aft';
+  return 'Square';
+}
 window.shipSpAdj = async function(id, delta) {
   const s=(appData.ships||{})[id]; if(!s) return;
   const n=Math.max(0,Math.min(s.spMax,(s.spCurrent||0)+delta));
@@ -980,6 +986,7 @@ function shipCard(id, s) {
     </div>
     <div class="ship-meta">
       <span class="tag ${crewClass}">${s.crewLevel} Crew</span>
+      ${(s.rig||_defaultRig(s.type)) === 'Square' ? `<span class="tag">⬜ Square</span>` : (s.rig||_defaultRig(s.type)) === 'Lateen' ? `<span class="tag" style="color:#b8a9d9">△ Lateen</span>` : `<span class="tag" style="color:#7ec8e3">◁ Fore &amp; Aft</span>`}
       ${!s.repairPort ? `<span class="tag">${s.location}</span>` : ''}
       ${s.fastSailer ? `<span class="tag" style="color:#7ec8e3">⚡ Fast</span>` : ''}
       ${s.swivels ? `<span class="tag" style="color:#e8a44a">🔫 Swivels</span>` : ''}
@@ -2362,6 +2369,11 @@ function shipFormHtml(s) {
       <div class="form-row"><label>Cost (resources)</label><input type="number" id="sf-cost" value="${s.cost||0}"></div>
     </div>
     <div class="form-grid">
+      <div class="form-row"><label>Rig</label><select id="sf-rig">
+        ${['Square','Fore and Aft','Lateen'].map(r=>`<option value="${r}"${(s.rig||_defaultRig(s.type))===r?' selected':''}>${r}</option>`).join('')}
+      </select></div>
+    </div>
+    <div class="form-grid">
       <div class="form-row"><label>SP Current</label><input type="number" id="sf-spCurrent" value="${s.spCurrent||0}" min="0" oninput="recalcRepairCost()"></div>
       <div class="form-row"><label>SP Max</label><input type="number" id="sf-spMax" value="${s.spMax||0}" min="1" oninput="recalcRepairCost()"></div>
     </div>
@@ -2471,6 +2483,7 @@ function readShipForm(existing) {
     location: document.getElementById('sf-location').value,
     squadron: document.getElementById('sf-squadron').value.trim(),
     crewLevel: document.getElementById('sf-crew').value,
+    rig: document.getElementById('sf-rig')?.value || '',
     role: document.getElementById('sf-role')?.value || '',
     status: document.getElementById('sf-status').value,
     battlesWithoutStriking: parseInt(document.getElementById('sf-battles').value)||0,
