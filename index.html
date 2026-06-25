@@ -2918,7 +2918,7 @@ window.openAddShip = function(playerId, faction) {
     <div class="section-label" style="margin-top:14px">Campaign Details</div>
     <div class="form-grid">
       <div class="form-row"><label>Location</label><select id="as-location">${ZONES.map(z=>`<option>${z}</option>`).join('')}</select></div>
-      <div class="form-row"><label>Squadron</label><select id="as-squadron"><option value="">— None —</option>${'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(l=>`<option value="${l}">${l}</option>`).join('')}</select></div>
+      ${playerId === 'merchant' ? `<div class="form-row"><label>Nation</label><select id="as-merchant-faction"><option value="Merchant">Merchant (generic)</option>${MERCHANT_FACTIONS.map(f=>`<option value="${f}">${f}</option>`).join('')}</select></div>` : `<div class="form-row"><label>Squadron</label><select id="as-squadron"><option value="">— None —</option>${'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(l=>`<option value="${l}">${l}</option>`).join('')}</select></div>`}
     </div>
     <div class="form-row"><label>Status</label><select id="as-status">${STATUSES.map(st=>`<option${st==='active'?' selected':''}>${st}</option>`).join('')}</select></div>
     <div class="form-row"><label>Officer Assigned</label><select id="as-officer">${officerOpts}</select></div>
@@ -2939,19 +2939,25 @@ window.openAddShip = function(playerId, faction) {
 window.saveNewShip = async function() {
   const name=document.getElementById('as-name').value.trim();
   if (!name) { showToast('Ship needs a name'); return; }
+  const isMerchantShip = _asPlayerId === 'merchant';
   const cost=parseInt(document.getElementById('as-cost').value)||0;
   const player=(appData.players||{})[_asPlayerId];
   const currentRes=player?.resources??0;
 
-  if (currentRes < cost) {
-    showToast(`Insufficient resources — need ${cost}, have ${currentRes}`);
-    return;
+  if (!isMerchantShip) {
+    if (currentRes < cost) {
+      showToast(`Insufficient resources — need ${cost}, have ${currentRes}`);
+      return;
+    }
+    if (!confirm(`Purchase ${name} for ${cost} resources?\n\nRemaining after purchase: ${currentRes - cost} resources`)) return;
   }
-  const remaining=currentRes-cost;
-  if (!confirm(`Purchase ${name} for ${cost} resources?\n\nRemaining after purchase: ${remaining} resources`)) return;
+
+  const faction = isMerchantShip
+    ? (document.getElementById('as-merchant-faction')?.value || 'Merchant')
+    : _asFaction;
 
   const data={
-    player:_asPlayerId, faction:_asFaction, name,
+    player:_asPlayerId, faction, name,
     type:document.getElementById('as-type').value,
     crewLevel:document.getElementById('as-crew').value,
     cost,
@@ -2964,10 +2970,10 @@ window.saveNewShip = async function() {
     bowChaser:document.getElementById('as-bow')?.value||'',
     sternChaser:document.getElementById('as-stern')?.value||'',
     location:document.getElementById('as-location').value,
-    squadron:document.getElementById('as-squadron').value.trim(),
+    squadron:isMerchantShip ? '' : document.getElementById('as-squadron').value.trim(),
     status:document.getElementById('as-status').value,
     battlesWithoutStriking:0,
-    officer:document.getElementById('as-officer').value,
+    officer:isMerchantShip ? '' : document.getElementById('as-officer').value,
     repairPort:document.getElementById('as-repairPort').value,
     repairCostPaid:parseInt(document.getElementById('as-repairCost').value)||0,
     availableIn:document.getElementById('as-available').value.trim(),
@@ -2977,10 +2983,10 @@ window.saveNewShip = async function() {
   const newShipRef=push(cref('/ships'));
   const updates={};
   updates[`/ships/${newShipRef.key}`]=data;
-  updates[`/players/${_asPlayerId}/resources`]=remaining;
+  if (!isMerchantShip) updates[`/players/${_asPlayerId}/resources`]=currentRes-cost;
   await update(cref('/'),updates);
   closeModal();
-  showToast(`${name} purchased — ${remaining} resources remaining`);
+  showToast(isMerchantShip ? `${name} added to convoy` : `${name} purchased — ${currentRes-cost} resources remaining`);
 };
 
 window.saveShip = async function(id) {
