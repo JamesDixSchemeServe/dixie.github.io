@@ -284,6 +284,7 @@
     <button onclick="showTab('merchant')">Convoy</button>
     <button onclick="showTab('log')">Dispatches</button>
     <button onclick="showTab('map')">Map</button>
+    <button onclick="showTab('rules')">Rules</button>
   </nav>
   <main id="main-content"></main>
 </div>
@@ -578,6 +579,7 @@ function renderCurrentTab() {
       case 'merchant': c.innerHTML = renderMerchant(); break;
       case 'log':      c.innerHTML = renderLog(); break;
       case 'map':      c.innerHTML = renderMap(); break;
+      case 'rules':    c.innerHTML = renderRules(); break;
       default:         c.innerHTML = renderOverview(); break;
     }
   }
@@ -597,7 +599,8 @@ function rebuildNav() {
     ${playerBtns}
     <button class="${currentTab==='merchant'?'active':''}" onclick="showTab('merchant')">Convoy</button>
     <button class="${currentTab==='log'?'active':''}" onclick="showTab('log')">Dispatches</button>
-    <button class="${currentTab==='map'?'active':''}" onclick="showTab('map')">Map</button>`;
+    <button class="${currentTab==='map'?'active':''}" onclick="showTab('map')">Map</button>
+    <button class="${currentTab==='rules'?'active':''}" onclick="showTab('rules')">Rules</button>`;
 }
 
 // ─── OVERVIEW ─────────────────────────────────────────────────────────────────
@@ -1338,6 +1341,17 @@ window.mapGroupClick = function(encodedKey) {
 };
 
 // ─── LOG ──────────────────────────────────────────────────────────────────────
+function renderRules() {
+  return `<div style="height:calc(100vh - 120px)">
+    <iframe src="rules.pdf" style="width:100%;height:100%;border:none;display:block"
+      onerror="this.style.display='none';document.getElementById('rules-fallback').style.display='block'">
+    </iframe>
+    <div id="rules-fallback" style="display:none;padding:32px;text-align:center;color:var(--text-muted)">
+      <p>PDF not found. Add <code>rules.pdf</code> to your GitHub repository alongside <code>index.html</code>.</p>
+    </div>
+  </div>`;
+}
+
 function renderLog() {
   const log = appData.log || {};
   const entries = Object.entries(log).sort(([,a],[,b]) => (b.timestamp||'').localeCompare(a.timestamp||''));
