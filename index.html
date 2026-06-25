@@ -314,6 +314,19 @@
   </div>
 </div>
 
+<div id="no-campaign-screen" style="display:none">
+  <header><h1>⚓ Biscay & Iberian Station</h1></header>
+  <div id="setup">
+    <h2>No Campaign Specified</h2>
+    <p>You need a campaign link to access this app. Ask your campaign organiser to share the URL with you from Campaign Management.</p>
+    <p style="font-size:0.85rem;color:var(--text-muted);margin-top:12px">If you are the organiser, enter your campaign ID below to get started:</p>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <input id="nc-id" placeholder="e.g. biscay-1805" style="flex:1">
+      <button class="btn" onclick="noCampaignGo()">Go</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal container -->
 <div id="modal-overlay" class="overlay" style="display:none" onclick="closeModalOnOverlay(event)">
   <div class="modal" id="modal-content"></div>
@@ -361,7 +374,7 @@ import { getDatabase, ref, set, get, update, remove, onValue, push } from "https
 
 // ─── STATE ───────────────────────────────────────────────────────────────────
 let db, appData = {}, currentTab = 'overview', activeFilter = 'all';
-const campaignId = (location.hash.replace(/^#/,'').trim().toLowerCase().replace(/[^a-z0-9_-]/g,'') || 'default');
+const campaignId = location.hash.replace(/^#/,'').trim().toLowerCase().replace(/[^a-z0-9_-]/g,'');
 const cref = path => ref(db, `/campaigns/${campaignId}${path}`);
 
 const SHIP_TYPES = ['1st Rate','2nd Rate','3rd Rate','4th Rate','Razee','Heavy Frigate','5th Rate Frigate','6th Rate','Ship-Sloop','Brig-Sloop','Gun Brig','Corvette','Cutter','Schooner','Gunboat','Bomb Vessel','Xebec','Large Xebec','Polacre','Galley','Galiot','Tartane','Felucca','Merchantman','East Indiaman','Manila Galleon','Packet Ship','Privateer','Privateer Schooner','Privateer Brig','Privateer Cutter','Letter of Marque'];
@@ -451,6 +464,11 @@ async function boot() {
 }
 
 async function connect(cfg) {
+  if (!campaignId) {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('no-campaign-screen').style.display = 'block';
+    return;
+  }
   try {
     const app = initializeApp(cfg);
     db = getDatabase(app);
@@ -1384,6 +1402,13 @@ window.openCampaignModal = function() {
       <button class="btn btn-sm" onclick="campaignCreate()">Create</button>
     </div>
 
+    <div class="section-label" style="margin-top:20px">Clone From Another Campaign</div>
+    <p style="font-size:0.82rem;color:var(--text-muted);margin:4px 0 8px">Copy all data from another campaign into <strong>${campaignId}</strong>. This will overwrite any existing data here.</p>
+    <div style="display:flex;gap:8px">
+      <input id="cm-clone-src" placeholder="Source campaign ID (e.g. default)" style="flex:1">
+      <button class="btn btn-sm" onclick="campaignClone()">Clone</button>
+    </div>
+
     <div class="section-label" style="margin-top:20px;color:var(--red)">Reset This Campaign</div>
     <p style="font-size:0.82rem;color:var(--text-muted);margin:4px 0 10px">Wipe all players, ships, and dispatches for <strong>${campaignId}</strong>.</p>
     <button class="btn btn-danger" onclick="campaignNew()">Reset Campaign</button>
@@ -1398,6 +1423,25 @@ window.copyCampaignUrl = function() {
     document.execCommand('copy');
     showToast('Link copied!');
   });
+};
+
+window.campaignClone = async function() {
+  const src = document.getElementById('cm-clone-src').value.trim().toLowerCase().replace(/[^a-z0-9_-]/g,'');
+  if (!src) { showToast('Enter a source campaign ID'); return; }
+  if (src === campaignId) { showToast('Source and destination are the same'); return; }
+  if (!confirm(`Copy all data from "${src}" into "${campaignId}"?\n\nThis will overwrite everything in the current campaign.`)) return;
+  showToast('Cloning…');
+  const srcSnap = await get(ref(db, `/campaigns/${src}`));
+  if (!srcSnap.exists()) { showToast(`Campaign "${src}" not found`); return; }
+  await set(ref(db, `/campaigns/${campaignId}`), srcSnap.val());
+  showToast(`Cloned from "${src}" — reloading…`);
+  setTimeout(() => location.reload(), 1200);
+};
+
+window.noCampaignGo = function() {
+  const id = document.getElementById('nc-id').value.trim().toLowerCase().replace(/[^a-z0-9_-]/g,'');
+  if (!id) { showToast('Enter a campaign ID'); return; }
+  location.hash = id; location.reload();
 };
 
 window.campaignSwitch = function() {
