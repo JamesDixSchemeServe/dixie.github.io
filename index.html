@@ -932,6 +932,11 @@ window.shipSpAdj = async function(id, delta) {
   const n=Math.max(0,Math.min(s.spMax,(s.spCurrent||0)+delta));
   await update(cref(`/ships/${id}`),{spCurrent:n});
 };
+window.shipBattlesAdj = async function(id, delta) {
+  const s=(appData.ships||{})[id]; if(!s) return;
+  const n=Math.max(0,(s.battlesWithoutStriking||0)+delta);
+  await update(cref(`/ships/${id}`),{battlesWithoutStriking:n});
+};
 
 function shipCard(id, s) {
   const pct = s.spMax > 0 ? s.spCurrent / s.spMax : 1;
@@ -990,7 +995,6 @@ function shipCard(id, s) {
       ${!s.repairPort ? `<span class="tag">${s.location}</span>` : ''}
       ${s.fastSailer ? `<span class="tag" style="color:#7ec8e3">⚡ Fast</span>` : ''}
       ${s.swivels ? `<span class="tag" style="color:#e8a44a">🔫 Swivels</span>` : ''}
-      ${s.battlesWithoutStriking > 0 ? `<span class="tag">${s.battlesWithoutStriking} battle${s.battlesWithoutStriking>1?'s':''}</span>` : ''}
       ${s.repairPort ? `<span class="tag" style="color:var(--accent2)">⚓ ${s.repairPort}</span>` : ''}
       ${s.availableIn ? `<span class="tag" style="color:var(--accent)">Avail. ${s.availableIn}</span>` : ''}
       ${s.role === 'inshoreScout' ? `<span class="tag" style="color:#e8a44a;border-color:#e8a44a">🔭 Inshore Scout</span>` : ''}
@@ -1014,6 +1018,7 @@ function shipCard(id, s) {
       <div class="gs-item"><div class="gs-label">Turn</div><div class="gs-val" style="color:${_shipTurn(s.type)==='Red'?'var(--red)':_shipTurn(s.type)==='Yellow'?'#f4c430':'var(--green)'}">${_shipTurn(s.type)}</div></div>
       <div class="gs-item"><div class="gs-label">Knots</div><div class="gs-val">${_shipKnots(s.type, s.fastSailer)}</div></div>
       <div class="gs-item"><div class="gs-label">Break</div><div class="gs-val">${breakVal}</div></div>
+      <div class="gs-item"><div class="gs-label">Battles</div><div class="gs-val gs-sp"><button class="gs-btn" onclick="shipBattlesAdj('${id}',-1)">−</button><span>${s.battlesWithoutStriking||0}</span><button class="gs-btn" onclick="shipBattlesAdj('${id}',1)">+</button></div></div>
     </div>
     ${(() => {
       const sd = s.structuralDamage || [];
