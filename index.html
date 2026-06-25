@@ -1372,8 +1372,8 @@ function renderMap() {
     let startX, startY, atPort;
     const portPos = MAP_PORT_POS[loc];
     if (portPos) {
-      startX = portPos.x + (idx % 2 === 0 ? -4 : 4);
-      startY = portPos.y + 5 + Math.floor(idx / 2) * 4;
+      startX = portPos.x + (idx % 2 === 0 ? -3 : 3);
+      startY = portPos.y + Math.floor(idx / 2) * 5;
       atPort = true;
     } else {
       const slots = MAP_ZONE_SLOTS[loc] || [];
@@ -1403,8 +1403,9 @@ function renderMap() {
   const bubbleHtml = bubbles.map(b => {
     const shadow = b.atPort ? '0 1px 3px rgba(0,0,0,0.3)' : '0 2px 6px rgba(0,0,0,0.45)';
     const opacity = b.atPort ? 0.85 : 1;
+    const transform = b.atPort ? 'translate(-50%,0)' : 'translate(-50%,-50%)';
     return `<div onclick="mapGroupClick('${b.encodedKey}')"
-      style="position:absolute;left:${b.x}%;top:${b.y}%;transform:translate(-50%,-50%);
+      style="position:absolute;left:${b.x}%;top:${b.y}%;transform:${transform};
              background:${b.col};color:white;border:3px solid ${b.ringCol};border-radius:16px;
              padding:2px 8px;font-size:0.65rem;font-weight:700;cursor:pointer;
              white-space:nowrap;box-shadow:${shadow};z-index:10;line-height:1.6;opacity:${opacity}">
@@ -1536,38 +1537,48 @@ window.confirmMovement = async function(playerId) {
   renderCurrentTab();
 };
 
+// French and Spanish are campaign allies — they never intercept each other
+function areAllied(fac1, fac2) {
+  const allied = [['French','Spanish'],['Spanish','French']];
+  return allied.some(([a,b]) => a === fac1 && b === fac2);
+}
+
 window.openInterception = function() {
   const ships   = appData.ships   || {};
   const players = appData.players || {};
-  const meta    = appData.meta    || {};
 
-  // Find all zones where opposing factions have active ships
-  const zoneGroups = {}; // zone → { factionKey → [ships] }
-  Object.values(ships).forEach(s => {
-    if (s.status === 'sunk' || s.status === 'lost' || s.status === 'repairing') return;
+  // Build squadron groups per zone: key = zone, value = array of { key, player, faction, playerName, squadron, ships[] }
+  const zoneSquadrons = {}; // zone → [squadronEntry]
+  Object.entries(ships).forEach(([id, s]) => {
+    if (s.status === 'sunk' || s.status === 'lost' || s.status === 'captured' || s.status === 'repairing') return;
     const loc = s.location || '';
     if (!loc.startsWith('Zone')) return;
     const p = players[s.player] || {};
     const fac = p.faction || s.faction || '';
-    if (!fac || fac === 'Merchant' || MERCHANT_FACTIONS.includes(fac)) {
-      // Merchants count as present but don't generate interception themselves
-      if (!zoneGroups[loc]) zoneGroups[loc] = {};
-      if (!zoneGroups[loc]['_merchant']) zoneGroups[loc]['_merchant'] = [];
-      zoneGroups[loc]['_merchant'].push(s);
-      return;
+    const isMerch = !fac || fac === 'Merchant' || MERCHANT_FACTIONS.includes(fac);
+    if (!zoneSquadrons[loc]) zoneSquadrons[loc] = [];
+    const sqnKey = `${s.player}|||${s.squadron||''}`;
+    let entry = zoneSquadrons[loc].find(e => e.key === sqnKey);
+    if (!entry) {
+      entry = { key: sqnKey, player: s.player, faction: fac, playerName: p.name || s.player,
+                squadron: s.squadron || '', ships: [], isMerchant: isMerch };
+      zoneSquadrons[loc].push(entry);
     }
-    if (!zoneGroups[loc]) zoneGroups[loc] = {};
-    if (!zoneGroups[loc][fac]) zoneGroups[loc][fac] = [];
-    zoneGroups[loc][fac].push(s);
+    entry.ships.push({id, ...s});
   });
 
-  // Only zones with 2+ opposing factions (or merchant + military)
-  const contested = Object.entries(zoneGroups).filter(([, fg]) => {
-    const milFactions = Object.keys(fg).filter(f => f !== '_merchant');
-    return milFactions.length >= 2 || (milFactions.length === 1 && fg['_merchant']);
+  // Find zones with at least two non-allied military squadrons (or 1 military + merchant convoy)
+  const contestedZones = Object.entries(zoneSquadrons).filter(([, sqns]) => {
+    const mil = sqns.filter(e => !e.isMerchant);
+    if (mil.length < 2) return mil.length === 1 && sqns.some(e => e.isMerchant);
+    // Check at least one non-allied pair exists
+    for (let i = 0; i < mil.length; i++)
+      for (let j = i+1; j < mil.length; j++)
+        if (!areAllied(mil[i].faction, mil[j].faction)) return true;
+    return false;
   });
 
-  if (!contested.length) {
+  if (!contestedZones.length) {
     showModal(`<button class="modal-close" onclick="closeModal()">×</button>
       <h2>⚔ Interception</h2>
       <div style="padding:20px 0;color:var(--text-muted);text-align:center">No contested zones — no interception checks needed.</div>
@@ -1576,55 +1587,145 @@ window.openInterception = function() {
   }
 
   let html = `<button class="modal-close" onclick="closeModal()">×</button><h2>⚔ Interception Checks</h2>
-    <p style="font-size:0.82rem;color:var(--text-muted);margin:0 0 12px">Roll 2D6 per contested zone. 7+ = interception occurs. 12 always succeeds, 2 always fails. Max ±3 modifier.</p>`;
+    <p style="font-size:0.82rem;color:var(--text-muted);margin:0 0 14px">Select two opposing squadrons and roll 2D6. 7+ = interception. 12 always succeeds, 2 always fails. Max ±3 modifier.</p>`;
 
-  contested.forEach(([zone, factionGroups]) => {
-    const milFacs = Object.keys(factionGroups).filter(f => f !== '_merchant');
-    const hasMerchant = !!factionGroups['_merchant'];
-    const allZoneShips = Object.values(ships).filter(s => s.location === zone && s.status === 'active');
+  contestedZones.forEach(([zone, sqns]) => {
+    const mil = sqns.filter(e => !e.isMerchant);
+    const merchants = sqns.filter(e => e.isMerchant);
+    const zoneId = zone.replace(/\s+/g,'_');
 
-    // Calculate modifiers
-    let mod = 0, modLines = [];
-    if (hasMerchant) { mod += 2; modLines.push('+2 Merchant Convoy present'); }
-    const scouts  = allZoneShips.filter(s => s.role === 'inshoreScout').length;
-    const screens = allZoneShips.filter(s => s.role === 'squadronScreen').length;
-    const damaged = allZoneShips.some(s => (s.spCurrent||0) < (s.spMax||1) * 0.5);
-    if (scouts)  { mod += scouts;  modLines.push(`+${scouts} Inshore Scout${scouts>1?'s':''}`); }
-    if (damaged) { mod += 1;       modLines.push('+1 Ship below 50% SP'); }
-    if (screens) { mod -= screens; modLines.push(`−${screens} Squadron Screen${screens>1?'s':''}`); }
-    mod = Math.max(-3, Math.min(3, mod));
+    // Build option HTML for a squadron select, optionally excluding one key
+    function sqnOpts(excludeKey) {
+      return sqns.filter(e => !e.isMerchant && e.key !== excludeKey).map(e => {
+        const flag = FACTION_FLAG[e.faction] || '';
+        const label = `${flag} ${e.playerName}${e.squadron ? ` — Sqn ${e.squadron}` : ''} (${e.faction})`;
+        return `<option value="${encodeURIComponent(e.key)}">${label}</option>`;
+      }).join('');
+    }
 
-    const factionList = milFacs.map(f => `${FACTION_FLAG[f]||''} ${f}`).join(' vs ');
-    const encodedZone = encodeURIComponent(zone);
-    html += `<div class="card" style="margin-bottom:10px">
-      <div style="font-weight:700;margin-bottom:4px">${zone} — ${factionList}${hasMerchant?' + Convoy':''}</div>
-      <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px">
-        Modifier: <strong style="color:${mod>=0?'var(--green)':'var(--red)'}">
-          ${mod>=0?'+':''}${mod}</strong>
-        ${modLines.length ? `(${modLines.join(', ')})` : '(none)'}
+    // Default: pick first two non-allied mil squadrons as initial selection
+    let defSeeker = mil[0], defTarget = mil.find((e,i) => i > 0 && !areAllied(defSeeker.faction, e.faction));
+    if (!defTarget && merchants.length) defTarget = null; // seeker vs convoy
+
+    html += `<div class="card" style="margin-bottom:12px" id="izone-${zoneId}">
+      <div style="font-weight:700;font-size:0.95rem;margin-bottom:10px">⚓ ${zone}</div>
+      <div class="form-grid" style="gap:8px;margin-bottom:8px">
+        <div class="form-row"><label>Seeker squadron</label>
+          <select id="iseek-${zoneId}" onchange="recalcInterceptionMod('${zoneId}')">
+            ${sqns.filter(e=>!e.isMerchant).map(e=>{
+              const flag = FACTION_FLAG[e.faction]||'';
+              return `<option value="${encodeURIComponent(e.key)}">${flag} ${e.playerName}${e.squadron?` — Sqn ${e.squadron}`:''} (${e.faction})</option>`;
+            }).join('')}
+          </select></div>
+        <div class="form-row"><label>Target squadron</label>
+          <select id="itgt-${zoneId}" onchange="recalcInterceptionMod('${zoneId}')">
+            <option value="">(select target)</option>
+            ${sqns.filter(e=>!e.isMerchant).map(e=>{
+              const flag = FACTION_FLAG[e.faction]||'';
+              return `<option value="${encodeURIComponent(e.key)}">${flag} ${e.playerName}${e.squadron?` — Sqn ${e.squadron}`:''} (${e.faction})</option>`;
+            }).join('')}
+            ${merchants.length ? `<option value="__merchant__">🛒 Merchant Convoy (${merchants.reduce((n,e)=>n+e.ships.length,0)} ships)</option>` : ''}
+          </select></div>
       </div>
-      <button class="btn" onclick="rollInterception('${encodedZone}', ${mod})">🎲 Roll 2D6${mod!==0?` (${mod>=0?'+':''}${mod})`:''}
-      </button>
-      <span id="iresult-${encodedZone}" style="margin-left:10px;font-size:0.9rem"></span>
+      <div id="imod-${zoneId}" style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px"></div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <button class="btn" onclick="rollInterception('${zoneId}')">🎲 Roll 2D6</button>
+        <span id="iresult-${zoneId}" style="font-size:0.9rem"></span>
+      </div>
     </div>`;
   });
 
+  // Store squadron data for use in roll/recalc functions
+  window._interceptZoneData = zoneSquadrons;
+
   html += `<div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>`;
-  document.getElementById('modal-content').style.maxWidth = '600px';
+  document.getElementById('modal-content').style.maxWidth = '620px';
   showModal(html);
+
+  // Init modifier displays
+  contestedZones.forEach(([zone]) => {
+    const zoneId = zone.replace(/\s+/g,'_');
+    recalcInterceptionMod(zoneId);
+  });
 };
 
-window.rollInterception = function(encodedZone, mod) {
+window.recalcInterceptionMod = function(zoneId) {
+  const zone = zoneId.replace(/_/g,' ');
+  const sqns = (window._interceptZoneData || {})[zone] || [];
+  const seekKey = decodeURIComponent(document.getElementById(`iseek-${zoneId}`)?.value || '');
+  const tgtKey  = decodeURIComponent(document.getElementById(`itgt-${zoneId}`)?.value  || '');
+  const modEl   = document.getElementById(`imod-${zoneId}`);
+  if (!modEl) return;
+
+  if (!seekKey || !tgtKey) { modEl.textContent = ''; return; }
+
+  const seekEntry = sqns.find(e => e.key === seekKey);
+  const tgtEntry  = tgtKey === '__merchant__' ? null : sqns.find(e => e.key === tgtKey);
+
+  // Allied check
+  if (seekEntry && tgtEntry && areAllied(seekEntry.faction, tgtEntry.faction)) {
+    modEl.innerHTML = `<span style="color:var(--red)">⚠ These squadrons are allied — no interception possible</span>`;
+    return;
+  }
+  // Same player check
+  if (seekEntry && tgtEntry && seekEntry.player === tgtEntry.player) {
+    modEl.innerHTML = `<span style="color:var(--red)">⚠ Same player — select opposing squadrons</span>`;
+    return;
+  }
+
+  let mod = 0, modLines = [];
+  const seekShips = seekEntry ? seekEntry.ships : [];
+  const tgtShips  = tgtKey === '__merchant__'
+    ? sqns.filter(e => e.isMerchant).flatMap(e => e.ships)
+    : (tgtEntry ? tgtEntry.ships : []);
+
+  if (tgtKey === '__merchant__' || sqns.some(e => e.isMerchant && e.ships.length)) {
+    mod += 2; modLines.push('+2 Merchant convoy present');
+  }
+  const scouts = seekShips.filter(s => s.role === 'inshoreScout').length;
+  if (scouts) { mod += scouts; modLines.push(`+${scouts} Inshore Scout${scouts>1?'s':''}`); }
+  const damaged = tgtShips.some(s => (s.spCurrent||0) < (s.spMax||1) * 0.5);
+  if (damaged) { mod += 1; modLines.push('+1 Target below 50% SP'); }
+  const screens = tgtShips.filter(s => s.role === 'squadronScreen').length;
+  if (screens) { mod -= screens; modLines.push(`−${screens} Squadron Screen${screens>1?'s':''}`); }
+  mod = Math.max(-3, Math.min(3, mod));
+
+  const modStr = mod >= 0 ? `+${mod}` : `${mod}`;
+  const modCol = mod > 0 ? 'var(--green)' : mod < 0 ? 'var(--red)' : 'var(--text-muted)';
+  modEl.innerHTML = `Modifier: <strong style="color:${modCol}">${modStr}</strong>${modLines.length ? ` — ${modLines.join(', ')}` : ''}`;
+  // Store mod on button for roll to read
+  const btn = document.querySelector(`#izone-${zoneId} .btn`);
+  if (btn) { btn.dataset.mod = mod; btn.textContent = `🎲 Roll 2D6 (${modStr})`; if (mod===0) btn.textContent = '🎲 Roll 2D6'; }
+};
+
+window.rollInterception = function(zoneId) {
+  const zone = zoneId.replace(/_/g,' ');
+  const sqns = (window._interceptZoneData || {})[zone] || [];
+  const seekKey = decodeURIComponent(document.getElementById(`iseek-${zoneId}`)?.value || '');
+  const tgtKey  = decodeURIComponent(document.getElementById(`itgt-${zoneId}`)?.value  || '');
+  const seekEntry = sqns.find(e => e.key === seekKey);
+  const tgtEntry  = tgtKey === '__merchant__' ? null : sqns.find(e => e.key === tgtKey);
+
+  if (!seekKey || !tgtKey) { showToast('Select both seeker and target squadrons'); return; }
+  if (seekEntry && tgtEntry && (areAllied(seekEntry.faction, tgtEntry.faction) || seekEntry.player === tgtEntry.player)) {
+    showToast('Cannot roll interception between allied or same-player squadrons'); return;
+  }
+
+  const btn = document.querySelector(`#izone-${zoneId} .btn`);
+  const mod = parseInt(btn?.dataset.mod || '0');
+
   const d1 = Math.ceil(Math.random() * 6);
   const d2 = Math.ceil(Math.random() * 6);
   const raw = d1 + d2;
   const total = raw === 12 ? 12 : raw === 2 ? 2 : Math.max(2, Math.min(12, raw + mod));
   const intercepts = total >= 7;
   const forced = raw === 12 || raw === 2;
-  const el = document.getElementById(`iresult-${encodedZone}`);
+
+  const el = document.getElementById(`iresult-${zoneId}`);
   if (el) {
     const col = intercepts ? 'var(--accent)' : 'var(--text-muted)';
-    el.innerHTML = `<strong style="color:${col}">${d1}+${d2}=${raw}${mod!==0&&!forced?` (mod ${mod>=0?'+':''}${mod} → ${total})`:''} — ${intercepts?'⚔ BATTLE':'✗ Miss'}</strong>${forced?' <span style="font-size:0.75rem">(forced)</span>':''}`;
+    const modNote = mod !== 0 && !forced ? ` (${mod>=0?'+':''}${mod} → ${total})` : '';
+    el.innerHTML = `<strong style="color:${col}">${d1}+${d2}=${raw}${modNote} — ${intercepts?'⚔ BATTLE':'✗ No intercept'}</strong>${forced?` <span style="font-size:0.75rem;color:var(--text-muted)">(forced)</span>`:''}`;
   }
 };
 
