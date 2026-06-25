@@ -178,53 +178,83 @@
       linear-gradient(160deg, #f5e8cc 0%, #ecdcaa 20%, #f3e2b8 45%, #e9d59f 70%, #f0dcaa 100%);
     border: 1px solid #b8966a;
     border-radius: 2px;
-    padding: 36px 44px 40px;
+    padding: 40px 52px 44px 60px;
     font-family: 'IM Fell English', Georgia, serif;
-    font-size: 0.92rem;
-    line-height: 1.9;
+    font-size: 0.93rem;
+    line-height: 1.95;
     color: #1c0f06;
     position: relative;
     box-shadow: inset 0 0 50px rgba(100,60,20,0.12), 0 6px 24px rgba(0,0,0,0.45);
     margin-top: 12px;
   }
+  /* Faint ruled lines */
   .letter-parchment::before {
     content: '';
     position: absolute;
     inset: 0;
     border-radius: 2px;
-    background:
-      repeating-linear-gradient(0deg, transparent, transparent 28px, rgba(139,90,43,0.04) 28px, rgba(139,90,43,0.04) 29px);
+    background: repeating-linear-gradient(0deg, transparent, transparent 30px, rgba(139,90,43,0.05) 30px, rgba(139,90,43,0.05) 31px);
     pointer-events: none;
   }
+  /* Left margin rule */
+  .letter-parchment::after {
+    content: '';
+    position: absolute;
+    top: 0; bottom: 0; left: 44px;
+    width: 1px;
+    background: rgba(180,120,60,0.25);
+    pointer-events: none;
+  }
+  .letter-header-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 2em;
+    font-style: italic;
+    font-size: 0.82rem;
+    color: #3a2010;
+    line-height: 1.6;
+    text-align: right;
+  }
+  .letter-salutation {
+    font-family: 'Cinzel', serif;
+    font-size: 1.05rem;
+    font-style: italic;
+    margin-bottom: 1.4em;
+    color: #1a0c04;
+  }
   .letter-body { font-style: italic; }
-  .letter-body p { margin: 0 0 0.6em; text-indent: 2.2em; }
+  .letter-body p { margin: 0 0 0.5em; text-indent: 2.4em; }
   .letter-body p:first-child { text-indent: 0; }
+  .letter-closing {
+    margin-top: 1.4em;
+    font-style: italic;
+    line-height: 1.75;
+    color: #1c0f06;
+  }
+  .letter-closing p { margin: 0; text-indent: 0; }
   .letter-sig-block {
     display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-    margin-top: 1.8em;
-    gap: 16px;
+    justify-content: flex-end;
+    padding-right: 8%;
+    margin-top: 1.6em;
   }
-  .letter-sig-left { flex: 0 0 auto; }
-  .letter-sig-right { text-align: right; }
   .letter-sig-name {
     font-family: 'Pinyon Script', cursive;
-    font-size: 2.4rem;
+    font-size: 4.8rem;
     line-height: 1;
     color: #140a02;
     display: block;
   }
   .letter-sig-underline {
-    border-bottom: 1px solid rgba(30,15,5,0.35);
+    border-bottom: 1px solid rgba(30,15,5,0.3);
     width: 180px;
-    margin: 2px 0 6px auto;
+    margin: 4px 0 6px auto;
   }
   .letter-sig-rank {
     font-size: 0.78rem;
     font-style: italic;
     color: #3a2010;
-    line-height: 1.5;
+    line-height: 1.6;
   }
   .player-check-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 6px; }
   .player-check { display: flex; align-items: center; gap: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 6px 10px; font-size: 0.85rem; cursor: pointer; }
@@ -715,10 +745,10 @@ function renderPlayer(pid) {
   // Battle dispatches involving this player
   const allLog = appData.log || {};
   const playerReports = Object.entries(allLog).filter(([,e]) =>
-    e.reporter === pid || (e.opponents||[]).includes(pid)
+    e.reporter === pid
   ).sort(([,a],[,b]) => (b.timestamp||'').localeCompare(a.timestamp||''));
   if (playerReports.length) {
-    html += `<div class="section-label" style="margin-top:20px">Battle Dispatches</div>`;
+    html += `<div class="section-label" style="margin-top:20px">Latest Dispatches</div>`;
     html += playerReports.slice(0,5).map(([id,e]) => _reportCardHtml(id, e)).join('');
   }
 
@@ -1034,44 +1064,66 @@ function _reportCardHtml(id, e) {
     : (e.timestamp ? new Date(e.timestamp).toLocaleDateString('en-GB',{day:'numeric',month:'long'}) : '');
 
   const rawText = (e.letter || e.text || '(no content)');
-  const paragraphs = rawText.split(/\n{2,}|\n/).filter(l => l.trim()).map(l => {
-    const safe = l.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    return `<p>${safe}</p>`;
-  }).join('');
+  const lines = rawText.split(/\n/).map(l => l.trim()).filter(Boolean);
+
+  // Detect salutation: first line, short, ends with comma
+  let salutation = '';
+  let bodyLines = lines;
+  if (lines.length > 1 && lines[0].length < 70 && lines[0].endsWith(',')) {
+    salutation = lines[0].replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    bodyLines = lines.slice(1);
+  }
+
+  // Detect closing: trailing short lines (≤65 chars), up to 5 lines
+  let closingLines = [];
+  let i = bodyLines.length - 1;
+  while (i >= 0 && closingLines.length < 5 && bodyLines[i].length <= 65) {
+    closingLines.unshift(bodyLines[i]);
+    i--;
+  }
+  // Only treat as closing if at least 2 lines and the line before them is longer (body text)
+  if (closingLines.length < 2 || (i >= 0 && bodyLines[i].length <= 65)) closingLines = [];
+  const mainLines = closingLines.length ? bodyLines.slice(0, bodyLines.length - closingLines.length) : bodyLines;
+
+  const safe = t => t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const bodyHtml = mainLines.map(l => `<p>${safe(l)}</p>`).join('');
+  const closingHtml = closingLines.map(l => `<p>${safe(l)}</p>`).join('');
 
   const officerName = rp.officerName || e.reporter || 'Unknown';
   const rank = rp.rank || '';
   const allShips = appData.ships || {};
   const flagship = Object.values(allShips).find(s => s.player === e.reporter && s.status === 'active') || null;
-  const shipName = flagship ? flagship.name : '';
+  const shipName = e.location || (flagship ? flagship.name : '');
   const sealHtml = rp.sealUrl
     ? `<img src="${rp.sealUrl}" style="width:88px;height:88px;object-fit:cover;border-radius:50%;display:block">`
     : _generateSeal(officerName, rp.faction || '');
 
   const sigHtml = rp.signatureUrl
-    ? `<img src="${rp.signatureUrl}" style="max-width:220px;max-height:80px;object-fit:contain;display:block;margin-left:auto">`
+    ? `<img src="${rp.signatureUrl}" style="max-width:550px;max-height:200px;object-fit:contain;display:block;margin-left:auto">`
     : `<span class="letter-sig-name">${officerName}</span>`;
 
   const letter = `<div class="letter-parchment">
-    <div style="text-align:right;font-family:'IM Fell English',serif;font-size:0.8rem;font-style:italic;color:#3a2010;margin-bottom:1.4em">${date}</div>
-    <div class="letter-body">${paragraphs}</div>
-    <div class="letter-sig-block">
-      <div class="letter-sig-left">${sealHtml}</div>
-      <div class="letter-sig-right">
-        ${sigHtml}
-        <div class="letter-sig-underline"></div>
-        <div class="letter-sig-rank">${rank}${shipName ? '<br>'+shipName : ''}</div>
-      </div>
+    <div class="letter-header-row">
+      ${shipName ? `${safe(shipName)}<br>` : ''}${date}
     </div>
+    ${salutation ? `<div class="letter-salutation">${salutation}</div>` : ''}
+    <div class="letter-body">${bodyHtml}</div>
+    ${closingHtml ? `<div class="letter-closing">${closingHtml}</div>` : ''}
+    <div class="letter-sig-block">
+      <div style="display:flex;gap:20px;align-items:flex-end">${sealHtml}${sigHtml}</div>
+    </div>
+  </div>
+  <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
+    <button class="btn btn-ghost btn-sm" onclick="editDispatch('${id}')">Edit</button>
+    <button class="btn btn-ghost btn-sm" style="color:var(--red);border-color:var(--red)" onclick="deleteDispatch('${id}')">Delete dispatch</button>
   </div>`;
 
   return `<div class="report-card">
     <div style="display:flex;justify-content:space-between;align-items:flex-start">
       <div>
-        <div style="font-size:0.9rem;font-weight:bold;color:var(--accent)">${repTag}${sqNote}${opponents ? ' vs ' + opponents : ''}</div>
+        <div style="font-size:0.9rem;font-weight:bold;color:var(--accent)">${repTag}</div>
         ${date ? `<div class="report-meta">${date}</div>` : ''}
       </div>
-      <button class="btn btn-ghost btn-sm" style="color:var(--red);border-color:var(--red);flex-shrink:0;margin-left:8px" onclick="deleteDispatch('${id}')">Delete</button>
     </div>
     <div class="letter-collapsed" id="letter-${id}">${letter}</div>
     <button class="report-expand" id="ltoggle-${id}" onclick="toggleLetter('${id}')">Read full dispatch ▾</button>
@@ -1290,12 +1342,13 @@ window.openCampaignModal = function() {
     <h2>⚙ Campaign Management</h2>
 
     <div class="section-label">Active Campaign</div>
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-      <code style="background:var(--surface3);border:1px solid var(--border);border-radius:4px;padding:3px 8px;font-size:0.9rem;color:var(--accent)">${campaignId}</code>
+    <p style="font-size:0.8rem;color:var(--text-muted);margin:0 0 8px">Share this link with your players — anyone who opens it will see the same live campaign.</p>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <input id="cm-shareurl" readonly value="${location.origin + location.pathname}#${campaignId}" style="flex:1;font-size:0.8rem;color:var(--text-muted);cursor:text">
+      <button class="btn btn-sm" onclick="copyCampaignUrl()">Copy</button>
     </div>
-    <p style="font-size:0.8rem;color:var(--text-muted);margin:0 0 8px">Share this URL with your group — everyone on the same campaign ID sees live updates.</p>
     <div style="display:flex;gap:8px">
-      <input id="cm-switch" placeholder="other-campaign-id" style="flex:1">
+      <input id="cm-switch" placeholder="Switch to another campaign ID" style="flex:1">
       <button class="btn btn-sm" onclick="campaignSwitch()">Switch</button>
     </div>
 
@@ -1337,6 +1390,15 @@ window.openCampaignModal = function() {
   `);
 };
 
+
+window.copyCampaignUrl = function() {
+  const url = document.getElementById('cm-shareurl').value;
+  navigator.clipboard.writeText(url).then(() => showToast('Link copied!')).catch(() => {
+    document.getElementById('cm-shareurl').select();
+    document.execCommand('copy');
+    showToast('Link copied!');
+  });
+};
 
 window.campaignSwitch = function() {
   const id = document.getElementById('cm-switch').value.trim().toLowerCase().replace(/[^a-z0-9_-]/g,'');
@@ -2033,12 +2095,10 @@ window.openAddLog = function() {
     <div class="form-row"><label>Reporting Commander</label>
       <select id="log-reporter">${players.map(([id,p])=>`<option value="${id}">${FACTION_FLAG[p.faction]||''} ${p.officerName} (${p.name})</option>`).join('')}</select>
     </div>
-    <div class="form-grid">
-      <div class="form-row"><label>Squadron <span style="color:var(--text-muted);font-weight:normal">(optional)</span></label>
-        <select id="log-squadron"><option value="">— None —</option>${'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(l=>`<option value="${l}">${l}</option>`).join('')}</select></div>
-      <div class="form-row"><label>Date</label>
-        <input type="date" id="log-date" value="${new Date().toISOString().slice(0,10)}"></div>
-    </div>
+    <div class="form-row"><label>Date</label>
+      <input type="date" id="log-date" value="${new Date().toISOString().slice(0,10)}"></div>
+    <div class="form-row"><label>Location <span style="color:var(--text-muted);font-weight:normal">(optional — e.g. H.M.S. Lapwing, at sea)</span></label>
+      <input id="log-location" placeholder="Ship or place of writing"></div>
 
     <div class="form-row"><label>Opposing Forces</label>
       <div class="player-check-grid">
@@ -2062,8 +2122,8 @@ window.saveDispatch = async function() {
   const players   = appData.players || {};
   const meta      = appData.meta || {};
   const reporter  = document.getElementById('log-reporter').value;
-  const squadron  = document.getElementById('log-squadron').value.trim();
   const dateVal   = document.getElementById('log-date').value;
+  const location  = document.getElementById('log-location').value.trim();
   const opponents = Object.keys(players).filter(id => {
     const el = document.getElementById(`log-opp-${id}`);
     return el && el.checked;
@@ -2074,9 +2134,9 @@ window.saveDispatch = async function() {
     phase: meta.phase || 1,
     reporter,
     opponents,
-    squadron: squadron || '',
     letter,
     gameDate: dateVal || '',
+    location: location || '',
     timestamp: new Date().toISOString(),
   });
   document.getElementById('modal-content').style.maxWidth = '';
@@ -2088,6 +2148,58 @@ window.deleteDispatch = async function(id) {
   if (!confirm('Delete this dispatch? This cannot be undone.')) return;
   await remove(cref(`/log/${id}`));
   showToast('Dispatch deleted');
+};
+
+window.editDispatch = function(id) {
+  const e = (appData.log || {})[id];
+  if (!e) return;
+  const players = Object.entries(appData.players || {}).filter(([pid]) => pid !== 'merchant');
+  document.getElementById('modal-content').style.maxWidth = '640px';
+  showModal(`<button class="modal-close" onclick="closeModal()">&#x2715;</button>
+    <h2>&#x2693; Edit Dispatch</h2>
+
+    <div class="form-row"><label>Reporting Commander</label>
+      <select id="ed-reporter">${players.map(([pid,p])=>`<option value="${pid}"${e.reporter===pid?' selected':''}>${FACTION_FLAG[p.faction]||''} ${p.officerName} (${p.name})</option>`).join('')}</select>
+    </div>
+    <div class="form-row"><label>Date</label>
+      <input type="date" id="ed-date" value="${e.gameDate||''}"></div>
+    <div class="form-row"><label>Location <span style="color:var(--text-muted);font-weight:normal">(optional)</span></label>
+      <input id="ed-location" value="${e.location||''}" placeholder="Ship or place of writing"></div>
+
+    <div class="form-row"><label>Opposing Forces</label>
+      <div class="player-check-grid">
+        ${players.map(([pid,p])=>`<label class="player-check"><input type="checkbox" id="ed-opp-${pid}"${(e.opponents||[]).includes(pid)?' checked':''}> ${FACTION_FLAG[p.faction]||''} ${p.officerName} <span style="color:var(--text-muted);font-size:0.75rem">${p.name}</span></label>`).join('')}
+      </div>
+    </div>
+
+    <div class="form-row"><label>Dispatch</label>
+      <textarea id="ed-letter" rows="12" style="font-size:0.85rem;line-height:1.7;font-style:italic">${(e.letter||e.text||'').replace(/</g,'&lt;')}</textarea>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn" onclick="saveEditDispatch('${id}')">Save Changes</button>
+    </div>`);
+};
+
+window.saveEditDispatch = async function(id) {
+  const letter = document.getElementById('ed-letter').value.trim();
+  if (!letter) { showToast('Dispatch text cannot be empty'); return; }
+  const players = appData.players || {};
+  const opponents = Object.keys(players).filter(pid => {
+    const el = document.getElementById(`ed-opp-${pid}`);
+    return el && el.checked;
+  });
+  await update(cref(`/log/${id}`), {
+    reporter:  document.getElementById('ed-reporter').value,
+    gameDate:  document.getElementById('ed-date').value,
+    location:  document.getElementById('ed-location').value.trim(),
+    opponents,
+    letter,
+  });
+  document.getElementById('modal-content').style.maxWidth = '';
+  closeModal();
+  showToast('Dispatch updated');
 };
 
 // ─── MODAL HELPERS ────────────────────────────────────────────────────────────
