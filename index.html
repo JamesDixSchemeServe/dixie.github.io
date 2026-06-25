@@ -1226,7 +1226,7 @@ function renderMap() {
 
   // Exclude sunk/lost ships
   const activeShips = Object.entries(ships).filter(([,s]) =>
-    s.location && s.status !== 'sunk' && s.status !== 'lost'
+    s.location && s.status !== 'sunk' && s.status !== 'lost' && s.status !== 'captured'
   );
 
   // Group into squadrons: key = location|playerId|squadron
@@ -1323,6 +1323,7 @@ window.mapGroupClick = function(encodedKey) {
 
   const groupShips = Object.entries(ships).filter(([,s]) =>
     s.location === loc && s.player === playerId && (s.squadron || '') === squadron
+    && s.status !== 'sunk' && s.status !== 'lost' && s.status !== 'captured'
   );
 
   const isMerchant = MERCHANT_FACTIONS.includes(p.faction) || p.faction === 'Merchant';
