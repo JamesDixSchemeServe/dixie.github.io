@@ -575,11 +575,17 @@ function renderCurrentTab() {
     c.innerHTML = renderPlayer(currentTab);
   } else {
     switch(currentTab) {
-      case 'overview': c.innerHTML = renderOverview(); break;
-      case 'merchant': c.innerHTML = renderMerchant(); break;
-      case 'log':      c.innerHTML = renderLog(); break;
-      case 'map':      c.innerHTML = renderMap(); break;
-      case 'rules':    c.innerHTML = renderRules(); break;
+      case 'overview':      c.innerHTML = renderOverview(); break;
+      case 'merchant':      c.innerHTML = renderMerchant(); break;
+      case 'log':           c.innerHTML = renderLog(); break;
+      case 'map':           c.innerHTML = renderMap(); break;
+      case 'interception':
+        c.innerHTML = renderInterceptionTab();
+        Object.keys(window._interceptZoneData || {}).forEach(zone => {
+          recalcInterceptionMod(zone.replace(/\s+/g,'_'));
+        });
+        break;
+      case 'rules':         c.innerHTML = renderRules(); break;
       default:         c.innerHTML = renderOverview(); break;
     }
   }
@@ -600,6 +606,14 @@ function rebuildNav() {
     <button class="${currentTab==='merchant'?'active':''}" onclick="showTab('merchant')">Convoy</button>
     <button class="${currentTab==='log'?'active':''}" onclick="showTab('log')">Dispatches</button>
     <button class="${currentTab==='map'?'active':''}" onclick="showTab('map')">Map</button>
+    ${(() => {
+      const moveDone = (appData.meta || {}).movementDone || {};
+      const players = appData.players || {};
+      const milPlayers = Object.entries(players).filter(([,p]) => p.faction && !MERCHANT_FACTIONS.includes(p.faction) && p.faction !== 'Merchant');
+      const allConfirmed = milPlayers.length > 0 && milPlayers.every(([pid]) => moveDone[pid]);
+      const cls = currentTab==='interception' ? 'active' : allConfirmed ? '' : 'disabled';
+      return `<button class="${cls}" ${allConfirmed?`onclick="showTab('interception')"`:''} title="${allConfirmed?'':'All players must confirm movement first'}">⚔ Interception</button>`;
+    })()}
     <button class="${currentTab==='rules'?'active':''}" onclick="showTab('rules')">Rules</button>
   `;
 }
@@ -1545,21 +1559,32 @@ window.confirmMovement = async function(playerId) {
   renderCurrentTab();
 };
 
-// French and Spanish are campaign allies — they never intercept each other
-function areAllied(fac1, fac2) {
-  const allied = [['French','Spanish'],['Spanish','French']];
-  return allied.some(([a,b]) => a === fac1 && b === fac2);
-}
+function renderInterceptionTab() {
+  const meta     = appData.meta    || {};
+  const ships    = appData.ships   || {};
+  const players  = appData.players || {};
+  const turn     = meta.turn || 1;
+  const moveDone = meta.movementDone || {};
+  const milPlayers = Object.entries(players).filter(([,p]) => p.faction && !MERCHANT_FACTIONS.includes(p.faction) && p.faction !== 'Merchant');
+  const allConfirmed = milPlayers.length > 0 && milPlayers.every(([pid]) => moveDone[pid]);
 
-window.openInterception = function() {
-  const ships   = appData.ships   || {};
-  const players = appData.players || {};
-  const usedThisTurn = (appData.meta || {}).interceptionUsed || {};
+  if (!allConfirmed) {
+    const statusLines = milPlayers.map(([pid,p]) =>
+      `<div style="font-size:0.85rem;margin:3px 0">${FACTION_FLAG[p.faction]||''} ${p.name}: ${moveDone[pid]?'<span style="color:var(--green)">✓ Confirmed</span>':'<span style="color:var(--text-muted)">Pending…</span>'}</div>`
+    ).join('');
+    return `<div style="max-width:660px;margin:0 auto;padding:24px 0;text-align:center;color:var(--text-muted)">
+      <div style="font-size:1.1rem;font-weight:700;margin-bottom:12px">⚔ Interception</div>
+      <div style="margin-bottom:12px">All players must confirm movement before interception checks can begin.</div>
+      <div style="display:inline-block;text-align:left">${statusLines}</div>
+    </div>`;
+  }
+
+  const usedThisTurn = meta.interceptionUsed || {};
   const sqnUsed = key => !!usedThisTurn[key.replace(/\|/g,'_')];
 
-  // Build squadron groups per zone, separating scouts/screens into a per-zone per-player modifier pool
-  const zoneSquadrons = {}; // zone → [squadronEntry]
-  const zoneRoleShips = {};  // zone → { playerId → [scout/screen ships] }
+  // Build zone/squadron data (same logic as openInterception)
+  const zoneSquadrons = {};
+  const zoneRoleShips = {};
   Object.entries(ships).forEach(([id, s]) => {
     if (s.status === 'sunk' || s.status === 'lost' || s.status === 'captured' || s.status === 'repairing') return;
     const loc = s.location || '';
@@ -1567,109 +1592,91 @@ window.openInterception = function() {
     const p = players[s.player] || {};
     const fac = p.faction || s.faction || '';
     const isMerch = !fac || fac === 'Merchant' || MERCHANT_FACTIONS.includes(fac);
-
-    // Scouts and screens go into the modifier pool, not the squadron list
     if (s.role === 'inshoreScout' || s.role === 'squadronScreen') {
       if (!zoneRoleShips[loc]) zoneRoleShips[loc] = {};
       if (!zoneRoleShips[loc][s.player]) zoneRoleShips[loc][s.player] = [];
       zoneRoleShips[loc][s.player].push({id, ...s});
       return;
     }
-
     if (!zoneSquadrons[loc]) zoneSquadrons[loc] = [];
     const sqnKey = `${s.player}|||${s.squadron||''}`;
     let entry = zoneSquadrons[loc].find(e => e.key === sqnKey);
     if (!entry) {
-      entry = { key: sqnKey, player: s.player, faction: fac, playerName: p.name || s.player,
-                squadron: s.squadron || '', ships: [], isMerchant: isMerch };
+      entry = { key: sqnKey, player: s.player, faction: fac, playerName: p.name || s.player, squadron: s.squadron || '', ships: [], isMerchant: isMerch };
       zoneSquadrons[loc].push(entry);
     }
     entry.ships.push({id, ...s});
   });
+  window._interceptZoneData = zoneSquadrons;
   window._interceptRoleShips = zoneRoleShips;
 
-  // Find zones with at least two non-allied military squadrons (or 1 military + merchant convoy)
   const contestedZones = Object.entries(zoneSquadrons).filter(([, sqns]) => {
     const mil = sqns.filter(e => !e.isMerchant);
     if (mil.length < 2) return mil.length === 1 && sqns.some(e => e.isMerchant);
-    // Check at least one non-allied pair exists
     for (let i = 0; i < mil.length; i++)
       for (let j = i+1; j < mil.length; j++)
         if (!areAllied(mil[i].faction, mil[j].faction)) return true;
     return false;
   });
 
-  if (!contestedZones.length) {
-    showModal(`<button class="modal-close" onclick="closeModal()">×</button>
-      <h2>⚔ Interception</h2>
-      <div style="padding:20px 0;color:var(--text-muted);text-align:center">No contested zones — no interception checks needed.</div>
-      <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>`);
-    return;
+  // Previous results this turn
+  const turnResults = (meta.interceptionLog || {})[turn] || [];
+  const logHtml = turnResults.length ? `
+    <div class="section-label" style="margin-top:24px">Turn ${turn} Results</div>
+    ${turnResults.map(r => {
+      const col = r.intercepts ? 'var(--accent)' : 'var(--text-muted)';
+      const modNote = r.mod !== 0 ? ` (${r.mod>=0?'+':''}${r.mod} → ${r.total})` : '';
+      return `<div class="card" style="margin-bottom:6px;font-size:0.85rem;display:flex;gap:12px;align-items:center">
+        <span style="color:var(--text-muted);min-width:60px">${r.zone}</span>
+        <span>${r.seekerName} vs ${r.targetName}</span>
+        <span style="margin-left:auto;white-space:nowrap"><strong style="color:${col}">${r.d1}+${r.d2}=${r.raw}${modNote} — ${r.intercepts?'⚔ BATTLE':'✗ No intercept'}</strong></span>
+      </div>`;
+    }).join('')}` : '';
+
+  if (!contestedZones.length && !turnResults.length) {
+    return `<div style="max-width:660px;margin:0 auto;padding:24px 0;text-align:center;color:var(--text-muted)">
+      No contested zones this turn — no interception checks needed.</div>`;
   }
 
-  let html = `<button class="modal-close" onclick="closeModal()">×</button><h2>⚔ Interception Checks</h2>
-    <p style="font-size:0.82rem;color:var(--text-muted);margin:0 0 14px">Select two opposing squadrons and roll 2D6. 7+ = interception. 12 always succeeds, 2 always fails. Max ±3 modifier.</p>`;
-
+  let zonesHtml = '';
   contestedZones.forEach(([zone, sqns]) => {
-    const mil = sqns.filter(e => !e.isMerchant);
-    const merchants = sqns.filter(e => e.isMerchant);
     const zoneId = zone.replace(/\s+/g,'_');
-
-    // Build option HTML for a squadron select, optionally excluding one key
-    function sqnOpts(excludeKey) {
-      return sqns.filter(e => !e.isMerchant && e.key !== excludeKey).map(e => {
-        const flag = FACTION_FLAG[e.faction] || '';
-        const label = `${flag} ${e.playerName}${e.squadron ? ` — Sqn ${e.squadron}` : ''} (${e.faction})`;
-        return `<option value="${encodeURIComponent(e.key)}">${label}</option>`;
-      }).join('');
-    }
-
-    // Default: pick first two non-allied mil squadrons as initial selection
-    let defSeeker = mil[0], defTarget = mil.find((e,i) => i > 0 && !areAllied(defSeeker.faction, e.faction));
-    if (!defTarget && merchants.length) defTarget = null; // seeker vs convoy
-
-    // Build scout/screen summary for this zone
-    const zoneRoles = (zoneRoleShips[zone] || {});
-    const roleSummaryParts = [];
+    const merchants = sqns.filter(e => e.isMerchant);
+    const zoneRoles = zoneRoleShips[zone] || {};
+    const roleParts = [];
     Object.entries(zoneRoles).forEach(([pid, rships]) => {
-      const pname = (players[pid] || {}).name || pid;
+      const pname = (players[pid]||{}).name || pid;
       rships.forEach(s => {
-        const roleLabel = s.role === 'inshoreScout' ? 'Scout +1' : 'Screen −1';
+        const lbl = s.role === 'inshoreScout' ? 'Scout +1' : 'Screen −1';
         const used = usedThisTurn[`${pid}|||${s.id}`.replace(/\|/g,'_')];
-        roleSummaryParts.push(`${pname}: ${s.name} (${roleLabel})${used ? ' <span style="opacity:0.5">✓ used</span>' : ''}`);
+        roleParts.push(`${pname}: ${s.name} (${lbl})${used?' <span style="opacity:0.5">✓ used</span>':''}`);
       });
     });
-    const roleSummaryHtml = roleSummaryParts.length
+    const roleSummaryHtml = roleParts.length
       ? `<div style="font-size:0.76rem;color:var(--text-muted);margin-bottom:8px;padding:5px 8px;background:var(--surface2);border-radius:4px">
-           <strong style="color:var(--text)">Scouts &amp; Screens in zone:</strong> ${roleSummaryParts.join(' &nbsp;|&nbsp; ')}
-         </div>`
-      : '';
+           <strong style="color:var(--text)">Scouts &amp; Screens:</strong> ${roleParts.join(' &nbsp;|&nbsp; ')}</div>` : '';
 
-    html += `<div class="card" style="margin-bottom:12px" id="izone-${zoneId}">
+    const milSqns = sqns.filter(e => !e.isMerchant);
+    const sqnOpts = milSqns.map(e => {
+      const used = sqnUsed(e.key);
+      const flag = FACTION_FLAG[e.faction]||'';
+      return `<option value="${encodeURIComponent(e.key)}"${used?' disabled':''}>${flag} ${e.playerName}${e.squadron?` — Sqn ${e.squadron}`:''} (${e.faction})${used?' ✓ used':''}</option>`;
+    }).join('');
+    const merchantOpt = merchants.length ? `<option value="__merchant__">🛒 Merchant Convoy (${merchants.reduce((n,e)=>n+e.ships.length,0)} ships)</option>` : '';
+
+    zonesHtml += `<div class="card" style="margin-bottom:12px" id="izone-${zoneId}">
       <div style="font-weight:700;font-size:0.95rem;margin-bottom:8px">⚓ ${zone}</div>
       ${roleSummaryHtml}
       <div class="form-grid" style="gap:8px;margin-bottom:8px">
         <div class="form-row"><label>Seeker squadron</label>
           <select id="iseek-${zoneId}" onchange="recalcInterceptionMod('${zoneId}')">
-            ${sqns.filter(e=>!e.isMerchant).map(e=>{
-              const used = sqnUsed(e.key);
-              const flag = FACTION_FLAG[e.faction]||'';
-              return `<option value="${encodeURIComponent(e.key)}"${used?' disabled':''}>
-                ${flag} ${e.playerName}${e.squadron?` — Sqn ${e.squadron}`:''} (${e.faction})${used?' ✓ used':''}
-              </option>`;
-            }).join('')}
+            ${sqnOpts}
           </select></div>
         <div class="form-row"><label>Target squadron</label>
           <select id="itgt-${zoneId}" onchange="recalcInterceptionMod('${zoneId}')">
             <option value="">(select target)</option>
-            ${sqns.filter(e=>!e.isMerchant).map(e=>{
-              const used = sqnUsed(e.key);
-              const flag = FACTION_FLAG[e.faction]||'';
-              return `<option value="${encodeURIComponent(e.key)}"${used?' disabled':''}>
-                ${flag} ${e.playerName}${e.squadron?` — Sqn ${e.squadron}`:''} (${e.faction})${used?' ✓ used':''}
-              </option>`;
-            }).join('')}
-            ${merchants.length ? `<option value="__merchant__">🛒 Merchant Convoy (${merchants.reduce((n,e)=>n+e.ships.length,0)} ships)</option>` : ''}
+            ${sqnOpts}
+            ${merchantOpt}
           </select></div>
       </div>
       <div id="imod-${zoneId}" style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px"></div>
@@ -1680,20 +1687,22 @@ window.openInterception = function() {
     </div>`;
   });
 
-  // Store squadron data and used-set for use in roll/recalc functions
-  window._interceptZoneData = zoneSquadrons;
-  window._interceptUsed = usedThisTurn;
+  return `<div style="max-width:660px;margin:0 auto;padding:12px 0">
+    <h2 style="margin-bottom:4px">⚔ Interception — Turn ${turn}</h2>
+    <p style="font-size:0.82rem;color:var(--text-muted);margin:0 0 14px">Roll 2D6 per matchup. 7+ = interception. 12 always succeeds, 2 always fails. Max ±3 modifier.</p>
+    ${zonesHtml}
+    ${logHtml}
+  </div>`;
+}
 
-  html += `<div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Close</button></div>`;
-  document.getElementById('modal-content').style.maxWidth = '620px';
-  showModal(html);
+// French and Spanish are campaign allies — they never intercept each other
+function areAllied(fac1, fac2) {
+  const allied = [['French','Spanish'],['Spanish','French']];
+  return allied.some(([a,b]) => a === fac1 && b === fac2);
+}
 
-  // Init modifier displays
-  contestedZones.forEach(([zone]) => {
-    const zoneId = zone.replace(/\s+/g,'_');
-    recalcInterceptionMod(zoneId);
-  });
-};
+window.openInterception = function() { showTab('interception'); };
+
 
 window.recalcInterceptionMod = function(zoneId) {
   const zone = zoneId.replace(/_/g,' ');
@@ -1823,24 +1832,25 @@ window.rollInterception = function(zoneId) {
     (rolePool[tgtEntry.player] || []).filter(s => s.role === 'squadronScreen').forEach(s => markUsed(`${s.player}|||${s.id}`));
   }
 
+  // Log result for this turn
+  const turn = (appData.meta || {}).turn || 1;
+  const seekEntry2 = (window._interceptZoneData || {})[zone]?.find(e => e.key === seekKey);
+  const tgtEntry2  = tgtKey === '__merchant__' ? null : (window._interceptZoneData || {})[zone]?.find(e => e.key === tgtKey);
+  const logEntry = {
+    zone, turn, d1, d2, raw, total, mod, intercepts,
+    seekerName: seekEntry2 ? `${seekEntry2.playerName}${seekEntry2.squadron ? ` Sqn ${seekEntry2.squadron}` : ''}` : seekKey,
+    targetName: tgtKey === '__merchant__' ? 'Merchant Convoy' : (tgtEntry2 ? `${tgtEntry2.playerName}${tgtEntry2.squadron ? ` Sqn ${tgtEntry2.squadron}` : ''}` : tgtKey),
+  };
+  const logIdx = ((appData.meta || {}).interceptionLog || {})[turn]?.length || 0;
+  updates[`/meta/interceptionLog/${turn}/${logIdx}`] = logEntry;
+  if (!appData.meta.interceptionLog) appData.meta.interceptionLog = {};
+  if (!appData.meta.interceptionLog[turn]) appData.meta.interceptionLog[turn] = [];
+  appData.meta.interceptionLog[turn].push(logEntry);
+
   update(cref('/'), updates);
 
-  // Disable roll button and grey out used squadron options
-  const rollBtn = document.querySelector(`#izone-${zoneId} .btn`);
-  if (rollBtn) { rollBtn.disabled = true; rollBtn.style.opacity = '0.45'; }
-  [document.getElementById(`iseek-${zoneId}`), document.getElementById(`itgt-${zoneId}`)].forEach(sel => {
-    if (!sel) return;
-    [...sel.options].forEach(opt => {
-      const k = decodeURIComponent(opt.value);
-      const fbK = k.replace(/\|/g,'_');
-      if (k && k !== '__merchant__' && appData.meta.interceptionUsed[fbK]) {
-        opt.disabled = true;
-        if (!opt.text.includes('✓ used')) opt.text += ' ✓ used';
-      }
-    });
-  });
-  // Refresh modifier display to show scouts/screens now marked used
-  recalcInterceptionMod(zoneId);
+  // Re-render the tab to reflect used state and new log entry
+  renderCurrentTab();
 };
 
 // ─── HISTORY ─────────────────────────────────────────────────────────────────
@@ -1918,7 +1928,21 @@ function renderHistory() {
       }
     }
 
-    if (!dispatches.length && !repairsDone.length && !noteText) {
+    const interceptions = ((appData.meta || {}).interceptionLog || {})[t] || [];
+    if (interceptions.length) {
+      html += `<div class="section-label" style="margin-top:8px;margin-bottom:6px">Interception Checks (${interceptions.length})</div>`;
+      for (const r of interceptions) {
+        const col = r.intercepts ? 'var(--accent)' : 'var(--text-muted)';
+        const modNote = r.mod !== 0 ? ` (${r.mod>=0?'+':''}${r.mod} → ${r.total})` : '';
+        html += `<div style="font-size:0.82rem;padding:4px 0;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center">
+          <span style="color:var(--text-muted);min-width:55px">${r.zone}</span>
+          <span>${r.seekerName} vs ${r.targetName}</span>
+          <span style="margin-left:auto;white-space:nowrap"><strong style="color:${col}">${r.d1}+${r.d2}=${r.raw}${modNote} — ${r.intercepts?'⚔ BATTLE':'✗ Miss'}</strong></span>
+        </div>`;
+      }
+    }
+
+    if (!dispatches.length && !repairsDone.length && !interceptions.length && !noteText) {
       html += `<div style="font-size:0.8rem;color:var(--text-muted);font-style:italic">No activity recorded.</div>`;
     }
 
@@ -2039,8 +2063,7 @@ window.openCampaignModal = function() {
         `<div style="font-size:0.8rem;margin:2px 0">${FACTION_FLAG[p.faction]||''} ${p.name}: ${moveDone[pid] ? '<span style="color:var(--green)">✓ Confirmed</span>' : '<span style="color:var(--text-muted)">Pending…</span>'}</div>`
       ).join('');
       return `${statusLines}
-        <button class="btn btn-sm" style="margin-top:8px${allConfirmed?'':';opacity:0.5'}" ${allConfirmed?'':'disabled'} onclick="openInterception()">⚔ Run Interception Checks</button>
-        ${!allConfirmed ? '<div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px">All players must confirm movement first</div>' : ''}`;
+        ${allConfirmed ? '<div style="font-size:0.75rem;color:var(--green);margin-top:4px">✓ Movement confirmed — use the Interception tab</div>' : '<div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px">Interception tab unlocks when all players confirm movement</div>'}`;
     })()}
 
     <div class="section-label" style="margin-top:20px">Campaign History</div>
