@@ -2100,7 +2100,7 @@ function shipFormHtml(s) {
         <option value="inshoreScout"${s.role==='inshoreScout'?' selected':''}>Inshore Scout (+1)</option>
         <option value="squadronScreen"${s.role==='squadronScreen'?' selected':''}>Squadron Screen (−1)</option>
       </select></div>
-      <div class="form-row"><label>Status</label><select id="sf-status">${STATUSES.map(st=>`<option${s.status===st?' selected':''}>${st}</option>`).join('')}</select></div>
+      <div class="form-row"><label>Status</label><select id="sf-status" onchange="onShipStatusChange()">${STATUSES.map(st=>`<option${s.status===st?' selected':''}>${st}</option>`).join('')}</select></div>
     </div>
     <div class="form-row"><label>Battles Without Striking</label><input type="number" id="sf-battles" value="${s.battlesWithoutStriking||0}" min="0"></div>
     <div class="form-row"><label>Officer Assigned</label><select id="sf-officer">${officerOpts}</select></div>
@@ -2108,31 +2108,22 @@ function shipFormHtml(s) {
     <div id="repair-cost-breakdown" style="font-size:0.78rem;color:var(--text-muted);margin:-4px 0 8px;padding:6px 8px;background:var(--surface2);border-radius:4px;display:none"></div>
     <div class="form-row"><label>Repair Cost <span style="font-weight:normal;color:var(--text-muted)">(auto-calculated)</span></label><input type="number" id="sf-repairCost" value="${s.repairCostPaid||0}" readonly style="background:var(--surface2);color:var(--accent);font-weight:bold"></div>
     <div class="form-row"><label>Available in Turn</label><input id="sf-available" value="${s.availableIn||''}"></div>
-    <div class="form-row"><label>Sunk By</label><select id="sf-sunkBy">
-      <option value="">(none)</option>
-      <option value="__accident__"${s.sunkBy==='__accident__'?' selected':''}>Accident</option>
-      ${Object.entries(appData.ships||{})
-        .filter(([sid, ps]) => sid !== (s._id||'') && ps.player !== s.player && ps.status !== 'sunk')
-        .sort(([,a],[,b]) => a.name.localeCompare(b.name))
-        .map(([sid, ps]) => {
-          const owner = (appData.players||{})[ps.player];
-          return `<option value="${sid}"${s.sunkBy===sid?' selected':''}>${ps.name} (${owner?owner.name:ps.player})</option>`;
-        }).join('')}
-    </select></div>
-    <div class="form-row"><label>Captured By (enemy ship)</label><select id="sf-capturedBy">
-      <option value="">(none)</option>
-      ${Object.entries(appData.ships||{})
-        .filter(([sid, ps]) => sid !== (s._id||'') && ps.player !== s.player && ps.status !== 'sunk')
-        .sort(([,a],[,b]) => a.name.localeCompare(b.name))
-        .map(([sid, ps]) => {
-          const owner = (appData.players||{})[ps.player];
-          return `<option value="${sid}"${s.capturedBy===sid?' selected':''}>${ps.name} (${owner?owner.name:ps.player})</option>`;
-        }).join('')}
-    </select></div>
-    <div class="form-row"><label>Transfer to Player</label><select id="sf-player">
-      <option value="${s.player||''}">(current)</option>
-      ${players.filter(([pid])=>pid!==(s.player||'')).map(([pid,p])=>`<option value="${pid}">${p.name} (${p.faction})</option>`).join('')}
-    </select></div>
+    <div id="sf-capture-section" style="display:none">
+      <div id="sf-capture-info" style="margin-bottom:8px;padding:8px 10px;border-radius:6px;font-size:0.82rem"></div>
+      <div class="form-row"><label id="sf-enemy-label">Enemy Ship</label><select id="sf-enemyShip">
+        <option value="">(unknown)</option>
+        <option value="__accident__"${(s.sunkBy==='__accident__'||s.capturedBy==='__accident__')?' selected':''}>Accident / No enemy ship</option>
+        ${Object.entries(appData.ships||{})
+          .filter(([sid, ps]) => sid !== (s._id||'') && ps.player !== s.player && ps.status !== 'sunk' && ps.status !== 'lost')
+          .sort(([,a],[,b]) => a.name.localeCompare(b.name))
+          .map(([sid, ps]) => {
+            const owner = (appData.players||{})[ps.player];
+            const selSunk = s.sunkBy === sid, selCap = s.capturedBy === sid;
+            return `<option value="${sid}"${(selSunk||selCap)?' selected':''}>${ps.name} (${owner?owner.name:ps.player})</option>`;
+          }).join('')}
+      </select></div>
+    </div>
+    <input type="hidden" id="sf-player" value="${s.player||''}">
     ${(s.faction === 'Merchant' || MERCHANT_FACTIONS.includes(s.faction)) ? `
     <div class="form-row"><label>Merchant Nation</label><select id="sf-merchantFaction">
       <option value="Merchant"${(!s.faction||s.faction==='Merchant')?' selected':''}>— Unspecified —</option>
@@ -2186,8 +2177,8 @@ function readShipForm(existing) {
     repairPort: document.getElementById('sf-repairPort').value.trim(),
     repairCostPaid: parseInt(document.getElementById('sf-repairCost').value)||0,
     availableIn: document.getElementById('sf-available').value.trim(),
-    sunkBy: document.getElementById('sf-sunkBy').value || '',
-    capturedBy: document.getElementById('sf-capturedBy').value || '',
+    sunkBy: document.getElementById('sf-status').value === 'sunk' ? (document.getElementById('sf-enemyShip')?.value || '') : '',
+    capturedBy: document.getElementById('sf-status').value === 'captured' ? (document.getElementById('sf-enemyShip')?.value || '') : '',
     player: document.getElementById('sf-player').value || existing.player,
     structuralDamage: JSON.parse(document.getElementById('sf-structDamage')?.value || '[]'),
     crewHits: parseInt(document.getElementById('sf-crewHits')?.value) || 0,
@@ -2217,7 +2208,7 @@ window.openEditShip = function(id) {
   // Store ship id on breakdown element so recalcRepairCost can embed the jury rig button
   const bd = document.getElementById('repair-cost-breakdown');
   if (bd) bd.dataset.shipId = id;
-  _renderAsDecks(); _renderAsBroad(); _renderStructDamageList(); recalcRepairCost();
+  _renderAsDecks(); _renderAsBroad(); _renderStructDamageList(); recalcRepairCost(); onShipStatusChange();
 };
 
 // ─── PERSISTENT DAMAGE HELPERS ───────────────────────────────────────────────
@@ -2337,6 +2328,27 @@ window.recalcRepairCost = function() {
     else html += ` &nbsp;→&nbsp; <span style="color:var(--green)">Ready same turn</span>`;
     html += `<br>Total: <strong style="color:var(--accent)">${total} resources</strong>`;
     breakdown.innerHTML = html;
+  }
+};
+
+window.onShipStatusChange = function() {
+  const status = document.getElementById('sf-status')?.value;
+  const section = document.getElementById('sf-capture-section');
+  const info = document.getElementById('sf-capture-info');
+  const label = document.getElementById('sf-enemy-label');
+  if (!section) return;
+  if (status === 'sunk') {
+    section.style.display = '';
+    label.textContent = 'Sunk By';
+    info.style.cssText = 'margin-bottom:8px;padding:8px 10px;border-radius:6px;font-size:0.82rem;background:rgba(220,60,60,0.1);border:1px solid rgba(220,60,60,0.3);color:#e07070';
+    info.textContent = 'Ship will be marked as sunk and removed from active service.';
+  } else if (status === 'captured') {
+    section.style.display = '';
+    label.textContent = 'Captured By';
+    info.style.cssText = 'margin-bottom:8px;padding:8px 10px;border-radius:6px;font-size:0.82rem;background:rgba(126,200,227,0.1);border:1px solid rgba(126,200,227,0.3);color:#7ec8e3';
+    info.textContent = 'A copy of this ship will be created for the capturing player as a prize pending resolution. The original stays in this roster marked as lost.';
+  } else {
+    section.style.display = 'none';
   }
 };
 
@@ -2653,13 +2665,37 @@ window.saveShip = async function(id) {
     data.previousName = existing.name;
   }
 
-  // Transfer to new player
-  if (data.player !== existing.player) {
-    data.squadron = '';
-    data.status = 'captured';
-    data.prizeResolution = '';
-    const newOwner = (appData.players || {})[data.player];
-    if (newOwner) data.faction = newOwner.faction;
+  // Captured: keep original as 'lost', create prize copy for capturing player
+  if (data.status === 'captured' && existing.status !== 'captured') {
+    const enemyShipId = data.capturedBy;
+    const enemyShip = enemyShipId && enemyShipId !== '__accident__' ? (appData.ships || {})[enemyShipId] : null;
+    const capturingPlayer = enemyShip ? enemyShip.player : null;
+    const capturingOwner = capturingPlayer ? (appData.players || {})[capturingPlayer] : null;
+    const capturingName = capturingOwner ? capturingOwner.name : (enemyShip ? enemyShip.player : 'Unknown');
+    if (!confirm(`Mark ${data.name} as captured${enemyShip ? ` by ${enemyShip.name}` : ''}?\n\n• This ship stays in your roster as Lost\n• A prize copy will be created for ${capturingName} pending prize decision`)) return;
+    const lostData = { ...data, status: 'lost', squadron: '', repairPort: '', availableIn: '' };
+    const prizeData = {
+      ...existing,
+      status: 'captured',
+      capturedBy: enemyShipId || '',
+      squadron: '',
+      repairPort: '',
+      availableIn: '',
+      notes: `Captured from ${(appData.players||{})[existing.player]?.name || existing.player}`,
+      previousName: existing.name,
+      player: capturingPlayer || existing.player,
+      faction: capturingOwner ? capturingOwner.faction : existing.faction,
+    };
+    const updates = {};
+    updates[`/ships/${id}`] = lostData;
+    if (capturingPlayer) {
+      const prizeId = `prize_${id}_${Date.now()}`;
+      updates[`/ships/${prizeId}`] = prizeData;
+    }
+    await update(cref('/'), updates);
+    closeModal();
+    showToast(`${data.name} captured — prize added to ${capturingName}'s fleet`);
+    return;
   }
 
   // Entering repair: snap location to repairPort and deduct cost
