@@ -1305,14 +1305,29 @@ function renderMap() {
     const key = `${effectiveLoc}|||${s.player}|||${sqn}`;
     if (!groups[key]) groups[key] = { location: effectiveLoc, playerId: s.player, faction: s.faction, squadron: sqn, ships: [], escortKey: null };
     groups[key].ships.push({id, ...s});
-    // Track escort assignment for merchant groups
     if (s.escortedBy) groups[key].escortKey = s.escortedBy;
+  });
+
+  // Find naval groups that are actively escorting a convoy in the same zone — suppress their own bubble
+  const suppressedKeys = new Set();
+  Object.values(groups).forEach(grp => {
+    if (grp.escortKey) {
+      const [escPlayerId, escSqn] = grp.escortKey.split('|||');
+      const navalKey = `${grp.location}|||${escPlayerId}|||${escSqn||''}`;
+      if (groups[navalKey]) {
+        suppressedKeys.add(navalKey);
+        grp.escortShips = groups[navalKey].ships;
+        grp.escortFaction = groups[navalKey].faction;
+        grp.escortPlayerId = escPlayerId;
+        grp.escortSqn = escSqn;
+      }
+    }
   });
 
   // Simple overlap nudge: push down until clear
   const placed = [];
   function findClear(x, y) {
-    const DX = 9, DY = 3.5;
+    const DX = 9, DY = 5;
     for (let attempt = 0; attempt < 15; attempt++) {
       if (placed.every(p => Math.abs(p.x - x) >= DX || Math.abs(p.y - y) >= DY)) break;
       y += DY;
@@ -1323,54 +1338,28 @@ function renderMap() {
 
   const bubbles = [];
   const locCounters = {};
-  // Track escort group positions so convoys can stack below them
-  const escortPositions = {}; // escortKey → {x, y}
 
-  // Two passes: non-merchant first so escort positions are known
-  const groupEntries = Object.values(groups);
-  const nonMerchant = groupEntries.filter(g => g.faction !== 'Merchant' && !MERCHANT_FACTIONS.includes(g.faction) && g.playerId !== 'merchant');
-  const merchantGroups = groupEntries.filter(g => g.faction === 'Merchant' || MERCHANT_FACTIONS.includes(g.faction) || g.playerId === 'merchant');
+  Object.values(groups).forEach(grp => {
+    if (suppressedKeys.has(`${grp.location}|||${grp.playerId}|||${grp.squadron}`)) return;
 
-  [...nonMerchant, ...merchantGroups].forEach(grp => {
     const loc = grp.location;
     const isMerchant = grp.faction === 'Merchant' || MERCHANT_FACTIONS.includes(grp.faction) || grp.playerId === 'merchant';
 
-    let x, y, atPort;
-
-    let stackedUnderEscort = false;
-
-    // If this merchant group has an escort whose position we know, pin directly below it
-    if (isMerchant && grp.escortKey) {
-      const escPos = escortPositions[`${grp.location}|||${grp.escortKey}`];
-      if (escPos) {
-        x = escPos.x; y = escPos.y + 3.8; atPort = escPos.atPort;
-        placed.push({x, y});
-        stackedUnderEscort = true;
-      }
+    const idx = locCounters[loc] = (locCounters[loc] || 0);
+    locCounters[loc]++;
+    let startX, startY, atPort;
+    const portPos = MAP_PORT_POS[loc];
+    if (portPos) {
+      startX = portPos.x + (idx % 2 === 0 ? -4 : 4);
+      startY = portPos.y + 5 + Math.floor(idx / 2) * 4;
+      atPort = true;
+    } else {
+      const slots = MAP_ZONE_SLOTS[loc] || [];
+      const pos = slots[idx % slots.length] || { x: 30, y: 50 };
+      startX = pos.x; startY = pos.y; atPort = false;
     }
-
-    if (!stackedUnderEscort) {
-      const idx = locCounters[loc] = (locCounters[loc] || 0);
-      locCounters[loc]++;
-      let startX, startY;
-      const portPos = MAP_PORT_POS[loc];
-      if (portPos) {
-        startX = portPos.x + (idx % 2 === 0 ? -4 : 4);
-        startY = portPos.y + 5 + Math.floor(idx / 2) * 4;
-        atPort = true;
-      } else {
-        const slots = MAP_ZONE_SLOTS[loc] || [];
-        const pos = slots[idx % slots.length] || { x: 30, y: 50 };
-        startX = pos.x; startY = pos.y; atPort = false;
-      }
-      const resolved = findClear(startX, startY);
-      x = resolved.x; y = resolved.y;
-    }
-
-    // Record position for potential convoy stacking
-    if (!isMerchant) {
-      escortPositions[`${grp.location}|||${grp.playerId}|||${grp.squadron}`] = { x, y, atPort };
-    }
+    const resolved = findClear(startX, startY);
+    const x = resolved.x, y = resolved.y;
 
     const p = players[grp.playerId] || {};
     const playerShort = (p.name || grp.playerId || '?').slice(0, 8);
@@ -1378,25 +1367,26 @@ function renderMap() {
     const label = isMerchant ? `Convoy${sqnLabel}` : `${playerShort}${sqnLabel}`;
     const col = isMerchant ? '#7a6030' : (FC[grp.faction] || '#555');
     const flag = FACTION_FLAG[grp.faction] || '';
-    const shipCount = grp.ships.length;
+    const totalCount = grp.ships.length + (grp.escortShips ? grp.escortShips.length : 0);
     const hasRepair = grp.ships.some(s => s.status === 'repairing');
     const hasDamaged = grp.ships.some(s => s.spCurrent < s.spMax * 0.5);
     const statusIcon = hasRepair ? ' ⚓' : hasDamaged ? ' ⚡' : '';
+    // Ring colour: escort faction if escorted, white otherwise
+    const ringCol = grp.escortFaction ? (FC[grp.escortFaction] || 'white') : (atPort ? 'rgba(255,255,255,0.55)' : 'white');
 
     const encodedKey = encodeURIComponent(`${grp.location}|||${grp.playerId}|||${grp.squadron}`);
-    bubbles.push({ x, y, atPort, col, label, flag, shipCount, statusIcon, encodedKey });
+    bubbles.push({ x, y, atPort, col, label, flag, totalCount, statusIcon, encodedKey, ringCol });
   });
 
   const bubbleHtml = bubbles.map(b => {
-    const border = b.atPort ? '2px solid rgba(255,255,255,0.55)' : '2px solid white';
     const shadow = b.atPort ? '0 1px 3px rgba(0,0,0,0.3)' : '0 2px 6px rgba(0,0,0,0.45)';
     const opacity = b.atPort ? 0.85 : 1;
     return `<div onclick="mapGroupClick('${b.encodedKey}')"
       style="position:absolute;left:${b.x}%;top:${b.y}%;transform:translate(-50%,-50%);
-             background:${b.col};color:white;border:${border};border-radius:16px;
+             background:${b.col};color:white;border:3px solid ${b.ringCol};border-radius:16px;
              padding:2px 8px;font-size:0.65rem;font-weight:700;cursor:pointer;
              white-space:nowrap;box-shadow:${shadow};z-index:10;line-height:1.6;opacity:${opacity}">
-      ${b.flag} ${b.label} <span style="opacity:0.75;font-weight:400">(${b.shipCount})</span>${b.statusIcon}
+      ${b.flag} ${b.label} <span style="opacity:0.75;font-weight:400">(${b.totalCount})</span>${b.statusIcon}
     </div>`;
   }).join('');
 
