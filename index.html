@@ -924,6 +924,11 @@ function shipCard(id, s) {
         ${s.squadron ? `<div class="squadron-label">Squadron ${s.squadron}</div>` : ''}
       </div>
       <div class="ship-actions">
+        ${s.status === 'active' && (s.location || '').startsWith('Zone') ? (() => {
+          const currentTurn = (appData.meta || {}).turn || 1;
+          const used = s.juryRigTurn === currentTurn;
+          return `<button class="btn btn-sm btn-ghost" style="${used ? 'opacity:0.4;cursor:not-allowed' : 'color:var(--accent2)'}" ${used ? 'disabled' : `onclick="juryRigRepair('${id}')"`} title="${used ? 'Jury rig already used this turn' : 'At-sea D3 jury rig repair (once per turn)'}">⚓ D3</button>`;
+        })() : ''}
         <button class="btn btn-sm btn-ghost" onclick="openEditShip('${id}')">Edit</button>
       </div>
     </div>
@@ -1615,6 +1620,17 @@ const FACTION_PORTS = {
   Merchant: ['Plymouth','Cork','Brest','Lorient','La Rochelle','Rochefort','Bayonne','Santander','Ferrol','Coruña','Vigo','Lisbon','Cádiz','Gibraltar'],
 };
 
+// Approximate zone each port sits in (used for travel-time calculation)
+const PORT_ZONE = {
+  Plymouth:1, Cork:1,
+  Brest:2,
+  Lorient:3, 'La Rochelle':3, Rochefort:3,
+  Bayonne:4,
+  Santander:5, Ferrol:5, 'Coruña':5, Vigo:5,
+  Lisbon:6,
+  'Cádiz':7, Gibraltar:7,
+};
+
 function shipFormHtml(s) {
   const players = Object.entries(appData.players || {});
   const ownerPlayer = (appData.players || {})[s.player];
@@ -1861,11 +1877,25 @@ window.recalcRepairCost = function() {
   const portType    = isMajor ? 'Major Port' : 'Secondary Port';
 
   const spPct = spMax > 0 ? damaged / spMax : 0;
-  const turnsMissed = isMajor
+  const repairTurns = isMajor
     ? (spPct >= 0.5 ? 2 : spPct >= 0.25 ? 1 : 0)
     : (spPct >= 0.5 ? 2 : 1);
 
+  // Travel time: if ship is more than 1 zone away from the port, +1 turn
+  const shipLoc = document.getElementById('sf-location')?.value || '';
+  const shipZoneMatch = shipLoc.match(/Zone\s*(\d+)/i);
+  const shipZone = shipZoneMatch ? parseInt(shipZoneMatch[1]) : (PORT_ZONE[shipLoc] || null);
+  const portZone = PORT_ZONE[port] || null;
+  const travelTurns = (shipZone && portZone && Math.abs(shipZone - portZone) > 1) ? 1 : 0;
+  const totalTurns = repairTurns + travelTurns;
+
   costEl.value = total;
+
+  const currentTurn = (appData.meta || {}).turn || 1;
+  const availEl = document.getElementById('sf-available');
+  if (availEl) {
+    availEl.value = totalTurns > 0 ? `Turn ${currentTurn + totalTurns}` : '';
+  }
 
   if (breakdown) {
     breakdown.style.display = 'block';
@@ -1876,10 +1906,30 @@ window.recalcRepairCost = function() {
     } else if (!isMajor && damages.length) {
       html += `<br><span style="color:var(--red)">⚠ ${damages.length} structural damage instance${damages.length>1?'s':''} — requires major port</span>`;
     }
-    html += `<br>Turns in repair: <strong>${turnsMissed}</strong>`;
+    html += `<br>Turns in repair: <strong>${repairTurns}</strong>`;
+    if (travelTurns) html += ` + <strong>1 travel</strong>`;
+    if (totalTurns > 0) html += ` &nbsp;→&nbsp; <strong style="color:var(--accent)">Available Turn ${currentTurn + totalTurns}</strong>`;
+    else html += ` &nbsp;→&nbsp; <span style="color:var(--green)">Ready same turn</span>`;
     html += `<br>Total: <strong style="color:var(--accent)">${total} resources</strong>`;
     breakdown.innerHTML = html;
   }
+};
+
+window.juryRigRepair = async function(id) {
+  const s = (appData.ships || {})[id];
+  if (!s) return;
+  const currentTurn = (appData.meta || {}).turn || 1;
+  if (s.juryRigTurn === currentTurn) {
+    showToast('Jury rig repairs already used this turn');
+    return;
+  }
+  const roll = Math.ceil(Math.random() * 3);
+  const before = s.spCurrent || 0;
+  const newSP = Math.min(s.spMax || before, before + roll);
+  const gained = newSP - before;
+  if (!confirm(`D3 Jury Rig Repair — rolled ${roll}.\n+${gained} SP (${before} → ${newSP} / ${s.spMax})\n\nThis uses your at-sea repair for this turn. Proceed?`)) return;
+  await update(cref(`/ships/${id}`), { spCurrent: newSP, juryRigTurn: currentTurn });
+  showToast(`⚓ Jury rig rolled ${roll} — +${gained} SP (now ${newSP}/${s.spMax})`);
 };
 
 window.adjCrewHits = function(delta) {
