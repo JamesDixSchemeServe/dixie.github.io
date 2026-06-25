@@ -616,7 +616,7 @@ function renderPlayer(pid) {
   const filters = ['all','active','repairing','pending','captured','sunk'];
   html += `<div class="filter-bar">
     ${filters.map(f => {
-      const label = f === 'pending' ? 'Pending' : f === 'captured' ? 'Captured' : f.charAt(0).toUpperCase()+f.slice(1);
+      const label = f === 'pending' ? 'Pending' : f === 'captured' ? 'Captured' : f === 'sunk' ? 'Lost' : f.charAt(0).toUpperCase()+f.slice(1);
       const count = f === 'pending' ? pending.length : f === 'captured' ? captured.length : f === 'active' ? active.length : f === 'repairing' ? repairing.length : f === 'sunk' ? sunk.length : '';
       const badge = (f !== 'all' && count > 0) ? ` <span style="background:rgba(255,255,255,0.15);border-radius:10px;padding:0 5px;font-size:0.7rem">${count}</span>` : '';
       const highlight = f === 'pending' && pending.length > 0 ? ';border-color:var(--accent);color:var(--accent)' : '';
@@ -651,7 +651,7 @@ function renderPlayer(pid) {
     html += `<div class="section-label" style="color:var(--green)">Captured from Enemy</div><div class="ship-list">${captured.map(([id,s]) => shipCard(id,s)).join('')}</div>`;
   }
   if ((activeFilter === 'all' || activeFilter === 'sunk') && sunk.length) {
-    html += `<div class="section-label" style="color:var(--red)">Sunk</div><div class="ship-list">${sunk.map(([id,s]) => shipCard(id,s)).join('')}</div>`;
+    html += `<div class="section-label" style="color:var(--red)">Lost</div><div class="ship-list">${sunk.map(([id,s]) => shipCard(id,s)).join('')}</div>`;
   }
   if (!pShips.length) html += `<div class="empty-state">No ships to show.</div>`;
 
@@ -694,7 +694,7 @@ function renderFaction(faction) {
 
   // Filter
   html += `<div class="filter-bar">
-    ${['all','active','repairing','sunk'].map(f => `<button class="filter-btn${activeFilter===f?' active':''}" onclick="setFilter('${f}')">${f.charAt(0).toUpperCase()+f.slice(1)}</button>`).join('')}
+    ${['all','active','repairing','sunk'].map(f => `<button class="filter-btn${activeFilter===f?' active':''}" onclick="setFilter('${f}')">${f === 'sunk' ? 'Lost' : f.charAt(0).toUpperCase()+f.slice(1)}</button>`).join('')}
   </div>`;
 
   // Ships grouped by player
@@ -1000,10 +1000,10 @@ function renderMap() {
     x = resolved.x; y = resolved.y;
 
     const p = players[grp.playerId] || {};
-    const isMerchant = grp.faction === 'Merchant';
+    const isMerchant = grp.faction === 'Merchant' || MERCHANT_FACTIONS.includes(grp.faction) || grp.playerId === 'merchant';
     const playerShort = (p.name || grp.playerId || '?').slice(0, 8);
     const sqnLabel = grp.squadron ? ` ${grp.squadron}` : '';
-    const label = isMerchant ? `Merchant Convoy${sqnLabel}` : `${playerShort}${sqnLabel}`;
+    const label = isMerchant ? `Merchants${sqnLabel}` : `${playerShort}${sqnLabel}`;
     const col = FC[grp.faction] || '#555';
     const flag = isMerchant ? '' : (FACTION_FLAG[grp.faction] || '');
     const shipCount = grp.ships.length;
@@ -1050,8 +1050,8 @@ window.mapGroupClick = function(encodedKey) {
   );
 
   const isMerchant = MERCHANT_FACTIONS.includes(p.faction) || p.faction === 'Merchant';
-  const sqnLabel = squadron ? ` — ${isMerchant ? 'Convoy' : 'Squadron'} ${squadron}` : '';
-  const displayName = isMerchant ? `Merchant Convoy` : (p.name || playerId);
+  const sqnLabel = squadron ? ` — Squadron ${squadron}` : '';
+  const displayName = isMerchant ? 'Merchants' : (p.name || playerId);
   const officers = [...new Set(groupShips.map(([,s]) => s.officer).filter(Boolean))];
 
   const shipRows = groupShips.map(([id, s]) => {
