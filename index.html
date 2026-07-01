@@ -2915,17 +2915,22 @@ window.openHistoricalSearch = function() {
     const list = document.getElementById('hs-results');
     if (!list) return;
     if (!matches.length) { list.innerHTML = `<div style="color:var(--text-muted);padding:8px;font-style:italic">No matches</div>`; return; }
-    list.innerHTML = matches.map(s => `
+    list.innerHTML = matches.map(s => {
+      const gunLabel = s.guns ? s.guns + ' Gun ' : '';
+      const yearLabel = s.launched ? ' ' + s.launched : '';
+      const subtitle = s.nation + ' ' + gunLabel + s.type + yearLabel;
+      return `
       <div onclick="applyHistoricalShip('${s.id}')" style="padding:7px 10px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
         <div>
           <div style="font-weight:600;font-size:0.88rem">${s.name}</div>
-          <div style="font-size:0.75rem;color:var(--text-muted)">${s.nation} � ${s.type}${s.launched?' � '+s.launched:''}</div>
+          <div style="font-size:0.75rem;color:var(--text-muted)">${subtitle}</div>
         </div>
         <div style="text-align:right;flex-shrink:0">
-          <div style="font-size:0.78rem;color:var(--accent)">${s.broadsides||'�'}</div>
-          <div style="font-size:0.72rem;color:var(--text-muted)">SP ${s.sp}${s.cost ? ' · ' + s.cost + ' res' : ''}</div>
+          <div style="font-size:0.78rem;color:var(--accent)">${s.broadsides || ''}</div>
+          <div style="font-size:0.72rem;color:var(--text-muted)">${s.cost ? s.cost + ' res' : ''}</div>
         </div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   };
 
   const nations = [...new Set(HISTORICAL_SHIP_DB.map(s => s.nation))].sort();
