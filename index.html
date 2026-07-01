@@ -614,7 +614,8 @@ function rebuildNav() {
       const milPlayers = Object.entries(players).filter(([,p]) => p.faction && !MERCHANT_FACTIONS.includes(p.faction) && p.faction !== 'Merchant');
       const allConfirmed = milPlayers.length > 0 && milPlayers.every(([pid]) => moveDone[pid]);
       const cls = currentTab==='interception' ? 'active' : allConfirmed ? '' : 'disabled';
-      return `<button class="${cls}" ${allConfirmed?`onclick="showTab('interception')"`:''} title="${allConfirmed?'':'All players must confirm movement first'}">⚔ Interception</button>`;
+      const pending = milPlayers.filter(([pid]) => !moveDone[pid]).map(([,p]) => p.name).join(', ');
+      return `<button class="${cls}" onclick="${allConfirmed?`showTab('interception')`:`showToast('Movement not confirmed: '+${JSON.stringify(pending)})`}">⚔ Interception</button>`;
     })()}
     <button class="${currentTab==='rules'?'active':''}" onclick="showTab('rules')">Rules</button>
   `;
