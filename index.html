@@ -376,6 +376,7 @@ import { getDatabase, ref, set, get, update, remove, onValue, push } from "https
 
 // ─── STATE ───────────────────────────────────────────────────────────────────
 let db, appData = {}, currentTab = 'overview', activeFilter = 'all';
+const _collapsedSquadrons = new Set();
 const campaignId = location.hash.replace(/^#/,'').trim().toLowerCase().replace(/[^a-z0-9_-]/g,'');
 const cref = path => ref(db, `/campaigns/${campaignId}${path}`);
 
@@ -797,10 +798,22 @@ function renderPlayer(pid) {
     const squadronShips = active.filter(([,s]) => s.role !== 'inshoreScout' && s.role !== 'squadronScreen');
     const bySquadron = {};
     squadronShips.forEach(([id,s]) => { const sq = s.squadron || '(no squadron)'; (bySquadron[sq]||(bySquadron[sq]=[])).push([id,s]); });
-    for (const [sq, sqs] of Object.entries(bySquadron)) {
+    const sqEntries = Object.entries(bySquadron).sort(([a],[b]) => {
+      if (a === '(no squadron)') return 1;
+      if (b === '(no squadron)') return -1;
+      return a.localeCompare(b);
+    });
+    for (const [sq, sqs] of sqEntries) {
       sqs.sort(([,a],[,b]) => (a.sortOrder??9999) - (b.sortOrder??9999));
-      html += `<div class="section-label">${sq !== '(no squadron)' ? `Squadron ${sq}` : 'Individual / Detached'}</div>`;
-      html += `<div class="ship-list" data-sqnkey="${pid}|||${sq}">${sqs.map(([id,s]) => shipCard(id,s)).join('')}</div>`;
+      const colKey = `${pid}|||${sq}`;
+      const collapsed = _collapsedSquadrons.has(colKey);
+      const label = sq !== '(no squadron)' ? `Squadron ${sq}` : 'Individual / Detached';
+      html += `<div class="section-label" style="cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px" onclick="toggleSquadron('${pid}','${sq}')">
+        <span style="font-size:0.65rem;opacity:0.7">${collapsed ? '▶' : '▼'}</span>
+        <span>${label}</span>
+        <span style="font-size:0.72rem;color:var(--text-muted);font-weight:400;margin-left:2px">${sqs.length} ship${sqs.length!==1?'s':''}</span>
+      </div>`;
+      if (!collapsed) html += `<div class="ship-list" data-sqnkey="${colKey}">${sqs.map(([id,s]) => shipCard(id,s)).join('')}</div>`;
     }
     if (detached.length) {
       html += `<div class="section-label">Scouts &amp; Screens</div>`;
@@ -1744,6 +1757,10 @@ function renderInterceptionTab() {
       No contested zones this turn — no interception checks needed.</div>`;
   }
 
+  // Index latest result per zone so it survives tab re-renders
+  const latestResultByZone = {};
+  turnResults.forEach(r => { latestResultByZone[r.zone] = r; });
+
   let zonesHtml = '';
   contestedZones.forEach(([zone, sqns]) => {
     const zoneId = zone.replace(/\s+/g,'_');
@@ -1786,10 +1803,23 @@ function renderInterceptionTab() {
           </select></div>
       </div>
       <div id="imod-${zoneId}" style="font-size:0.78rem;color:var(--text-muted);margin-bottom:8px"></div>
-      <div style="display:flex;align-items:center;gap:10px">
-        <button class="btn" onclick="rollInterception('${zoneId}')">🎲 Roll 2D6</button>
-        <span id="iresult-${zoneId}" style="font-size:0.9rem"></span>
-      </div>
+      ${(() => {
+        const r = latestResultByZone[zone];
+        const resultHtml = r ? (() => {
+          const col = r.intercepts ? 'var(--accent)' : 'var(--text-muted)';
+          const modNote = r.mod !== 0 ? ` (${r.mod>=0?'+':''}${r.mod} → ${r.total})` : '';
+          const forced = r.raw === 12 || r.raw === 2;
+          return `<div style="padding:6px 10px;border-radius:6px;background:var(--surface2);font-size:0.88rem">
+            <strong style="color:${col}">${r.d1}+${r.d2}=${r.raw}${modNote} — ${r.intercepts?'⚔ BATTLE':'✗ No intercept'}</strong>
+            ${forced?`<span style="font-size:0.75rem;color:var(--text-muted);margin-left:6px">(forced)</span>`:''}
+            <div style="font-size:0.75rem;color:var(--text-muted);margin-top:2px">${r.seekerName} vs ${r.targetName}</div>
+          </div>`;
+        })() : '';
+        return `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <button class="btn" onclick="rollInterception('${zoneId}')">🎲 Roll 2D6</button>
+          ${resultHtml}
+        </div>`;
+      })()}
     </div>`;
   });
 
@@ -1956,9 +1986,7 @@ window.rollInterception = function(zoneId) {
   appData.meta.interceptionLog[turn].push(logEntry);
 
   update(cref('/'), updates);
-
-  // Re-render the tab to reflect used state and new log entry
-  renderCurrentTab();
+  // onValue re-render will pick up used state and show the new log entry
 };
 
 // ─── HISTORY ─────────────────────────────────────────────────────────────────
@@ -2102,6 +2130,13 @@ function renderLog() {
 // ─── FILTERS ─────────────────────────────────────────────────────────────────
 window.setFilter = function(f) {
   activeFilter = f;
+  renderCurrentTab();
+};
+
+window.toggleSquadron = function(pid, sq) {
+  const key = `${pid}|||${sq}`;
+  if (_collapsedSquadrons.has(key)) _collapsedSquadrons.delete(key);
+  else _collapsedSquadrons.add(key);
   renderCurrentTab();
 };
 
