@@ -1725,7 +1725,8 @@ function renderInterceptionTab() {
   });
 
   // Previous results this turn
-  const turnResults = (meta.interceptionLog || {})[turn] || [];
+  const _rawLog = (meta.interceptionLog || {})[turn];
+  const turnResults = Array.isArray(_rawLog) ? _rawLog : Object.values(_rawLog || []);
   const logHtml = turnResults.length ? `
     <div class="section-label" style="margin-top:24px">Turn ${turn} Results</div>
     ${turnResults.map(r => {
@@ -1946,10 +1947,12 @@ window.rollInterception = function(zoneId) {
     seekerName: seekEntry2 ? `${seekEntry2.playerName}${seekEntry2.squadron ? ` Sqn ${seekEntry2.squadron}` : ''}` : seekKey,
     targetName: tgtKey === '__merchant__' ? 'Merchant Convoy' : (tgtEntry2 ? `${tgtEntry2.playerName}${tgtEntry2.squadron ? ` Sqn ${tgtEntry2.squadron}` : ''}` : tgtKey),
   };
-  const logIdx = ((appData.meta || {}).interceptionLog || {})[turn]?.length || 0;
-  updates[`/meta/interceptionLog/${turn}/${logIdx}`] = logEntry;
   if (!appData.meta.interceptionLog) appData.meta.interceptionLog = {};
-  if (!appData.meta.interceptionLog[turn]) appData.meta.interceptionLog[turn] = [];
+  // Firebase returns arrays as plain objects — normalise before push
+  const existingLog = appData.meta.interceptionLog[turn];
+  if (!Array.isArray(existingLog)) appData.meta.interceptionLog[turn] = Object.values(existingLog || {});
+  const logIdx = appData.meta.interceptionLog[turn].length;
+  updates[`/meta/interceptionLog/${turn}/${logIdx}`] = logEntry;
   appData.meta.interceptionLog[turn].push(logEntry);
 
   update(cref('/'), updates);
